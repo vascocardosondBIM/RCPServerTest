@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# .NET — plugin Revit (artefatos de build)
+revit-plugin/**/bin/
+revit-plugin/**/obj/
+*.user
+*.suo
+*.userosscache
+.vs/
+
+# Segredos e configuração local (nunca substituas isto por chaves reais e commits)
+.env
+.env.*
+!.env.example
+**/pluginsettings.local.json
+
+# IDE / SO
+.idea/
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+
+# Nota: a pasta `build/` do servidor MCP pode estar versionada para `npx`/publicação npm.
+# Não ignores `build/` se o teu fluxo de release depender dela no Git.

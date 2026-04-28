@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RevitSketchPoC</Name>
+    <Assembly>C:\REPLACE_WITH_BUILD_OUTPUT\RevitSketchPoC.dll</Assembly>
+    <AddInId>8D1A55E8-DBCC-4F67-B4D1-7B7D2A410D8A</AddInId>
+    <FullClassName>RevitSketchPoC.App.SketchToBimApp</FullClassName>
+    <VendorId>SKETCHAI</VendorId>
+    <VendorDescription>Sketch to BIM plugin (isolated test version)</VendorDescription>
+  </AddIn>
+</RevitAddIns>
