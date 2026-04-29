@@ -30,13 +30,13 @@
 
   <!-- WPF views as XAML text embedded at build time (avoids SDK MarkupCompile MC1000 on net48 + dotnet CLI). -->
   <ItemGroup>
-    <Page Remove="Views\SketchUploadWindow.xaml" />
-    <Page Remove="Views\LlmChatWindow.xaml" />
-    <EmbeddedResource Include="Views\SketchUploadWindow.xaml">
-      <LogicalName>RevitSketchPoC.Views.SketchUploadWindow.xaml</LogicalName>
+    <Page Remove="Sketch\Views\SketchUploadWindow.xaml" />
+    <Page Remove="Chat\Views\LlmChatWindow.xaml" />
+    <EmbeddedResource Include="Sketch\Views\SketchUploadWindow.xaml">
+      <LogicalName>RevitSketchPoC.Sketch.Views.SketchUploadWindow.xaml</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Views\LlmChatWindow.xaml">
-      <LogicalName>RevitSketchPoC.Views.LlmChatWindow.xaml</LogicalName>
+    <EmbeddedResource Include="Chat\Views\LlmChatWindow.xaml">
+      <LogicalName>RevitSketchPoC.Chat.Views.LlmChatWindow.xaml</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 </Project>
