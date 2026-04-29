@@ -15,10 +15,19 @@ namespace RevitSketchPoC.Commands
         {
             try
             {
+                var uidoc = commandData.Application.ActiveUIDocument;
+                if (uidoc == null)
+                {
+                    TaskDialog.Show(
+                        "Assistente IA",
+                        "Abre ou cria um documento Revit antes de abrir o chat (o assistente precisa de um projeto ativo).");
+                    return Result.Cancelled;
+                }
+
                 var assemblyDir = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
                 var settings = PluginSettingsLoader.Load(assemblyDir);
                 var chat = new LlmChatService(settings);
-                var vm = new LlmChatViewModel(chat);
+                var vm = new LlmChatViewModel(chat, uidoc);
                 var window = new LlmChatWindow(vm);
                 window.Show();
                 return Result.Succeeded;

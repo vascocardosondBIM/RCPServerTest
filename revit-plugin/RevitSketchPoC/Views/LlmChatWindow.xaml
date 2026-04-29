@@ -22,6 +22,34 @@
             <Setter Property="SnapsToDevicePixels" Value="True" />
         </Style>
 
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="#FFF8FAFC"
+                                BorderBrush="{StaticResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#FFEFF6FF" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Foreground" Value="White" />
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -88,11 +116,12 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                <StackPanel Grid.Row="0" Margin="0,0,0,10">
                     <TextBlock Text="Conversa com o LLM"
                                FontSize="20"
                                FontWeight="SemiBold"
@@ -101,10 +130,31 @@
                                FontSize="13"
                                Foreground="{StaticResource Brush.TextMuted}"
                                TextWrapping="Wrap"
-                               Text="Usa o mesmo fornecedor que o Sketch (pluginsettings.json). Por agora é só orientação — sem acesso ao modelo." />
+                               Text="O contexto do projeto é enviado ao LLM em cada mensagem. Atualiza o projeto ou inclui a seleção no Revit quando precisares de mais detalhe." />
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1"
+                <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Atualizar projeto"
+                                Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,8,0"
+                                Command="{Binding RefreshProjectContextCommand}" />
+                        <Button Content="Incluir seleção"
+                                Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,8,0"
+                                Command="{Binding IncludeSelectionContextCommand}" />
+                        <Button Content="Limpar seleção"
+                                Style="{StaticResource SecondaryButton}"
+                                Command="{Binding ClearSelectionContextCommand}" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0"
+                               FontSize="12"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               TextWrapping="Wrap"
+                               Text="{Binding ContextHint}" />
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="2"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="0,0,6,0">
@@ -112,7 +162,7 @@
                                   Focusable="False" />
                 </ScrollViewer>
 
-                <Grid Grid.Row="2" Margin="0,14,0,0">
+                <Grid Grid.Row="3" Margin="0,14,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />

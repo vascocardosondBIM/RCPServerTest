@@ -14,10 +14,12 @@ namespace RevitSketchPoC.Services
     /// </summary>
     public sealed class LlmChatService
     {
-        private const string SystemPrompt =
+        private const string SystemPromptBase =
             "You are a helpful assistant for Autodesk Revit users (architecture / BIM). " +
-            "Answer clearly and concisely. You cannot run Revit commands or read the model in this chat mode; " +
-            "you only provide guidance and explanations.";
+            "Answer clearly and concisely in the same language the user writes (Portuguese or English). " +
+            "When a JSON block titled Revit context is provided, treat it as read-only facts from the open model: " +
+            "do not invent element ids, names, or counts that contradict that data. " +
+            "You still cannot execute Revit transactions yourself; you guide the user (and may suggest steps, parameters, or checks).";
 
         private readonly PluginSettings _settings;
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
@@ -30,7 +32,10 @@ namespace RevitSketchPoC.Services
         /// <summary>
         /// Chronological turns: each item is (isUser, text). Last turn must be from the user.
         /// </summary>
-        public Task<string> CompleteAsync(IReadOnlyList<(bool isUser, string text)> turns)
+        /// <param name="revitContextForSystem">Optional Revit JSON/text merged into the system instruction each call.</param>
+        public Task<string> CompleteAsync(
+            IReadOnlyList<(bool isUser, string text)> turns,
+            string? revitContextForSystem = null)
         {
             var provider = string.IsNullOrWhiteSpace(_settings.LlmProvider)
                 ? "Ollama"
@@ -38,19 +43,31 @@ namespace RevitSketchPoC.Services
 
             if (string.Equals(provider, "Ollama", StringComparison.OrdinalIgnoreCase))
             {
-                return CompleteOllamaAsync(turns);
+                return CompleteOllamaAsync(turns, revitContextForSystem);
             }
 
             if (string.Equals(provider, "Gemini", StringComparison.OrdinalIgnoreCase))
             {
-                return CompleteGeminiAsync(turns);
+                return CompleteGeminiAsync(turns, revitContextForSystem);
             }
 
             throw new InvalidOperationException(
                 "Unknown LlmProvider in pluginsettings.json: \"" + provider + "\". Use \"Ollama\" or \"Gemini\".");
         }
 
-        private async Task<string> CompleteOllamaAsync(IReadOnlyList<(bool isUser, string text)> turns)
+        private static string MergeSystemPrompt(string? revitContextForSystem)
+        {
+            if (string.IsNullOrWhiteSpace(revitContextForSystem))
+            {
+                return SystemPromptBase;
+            }
+
+            return SystemPromptBase + "\n\n### Revit context (from plugin)\n" + revitContextForSystem.Trim();
+        }
+
+        private async Task<string> CompleteOllamaAsync(
+            IReadOnlyList<(bool isUser, string text)> turns,
+            string? revitContextForSystem)
         {
             var baseUrl = NormalizeOllamaBaseUrl(_settings.OllamaBaseUrl);
             var model = string.IsNullOrWhiteSpace(_settings.OllamaModel) ? "llava" : _settings.OllamaModel.Trim();
@@ -58,7 +75,7 @@ namespace RevitSketchPoC.Services
 
             var messages = new List<object>
             {
-                new { role = "system", content = SystemPrompt }
+                new { role = "system", content = MergeSystemPrompt(revitContextForSystem) }
             };
 
             foreach (var (isUser, text) in turns)
@@ -93,7 +110,9 @@ namespace RevitSketchPoC.Services
             }
         }
 
-        private async Task<string> CompleteGeminiAsync(IReadOnlyList<(bool isUser, string text)> turns)
+        private async Task<string> CompleteGeminiAsync(
+            IReadOnlyList<(bool isUser, string text)> turns,
+            string? revitContextForSystem)
         {
             if (string.IsNullOrWhiteSpace(_settings.GeminiApiKey))
             {
@@ -133,7 +152,7 @@ namespace RevitSketchPoC.Services
             {
                 systemInstruction = new
                 {
-                    parts = new object[] { new { text = SystemPrompt } }
+                    parts = new object[] { new { text = MergeSystemPrompt(revitContextForSystem) } }
                 },
                 contents
             };
