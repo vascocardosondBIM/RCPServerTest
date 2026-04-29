@@ -1,0 +1,141 @@
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="clr-namespace:RevitSketchPoC.ViewModels;assembly=RevitSketchPoC"
+      Background="#FFF1F5F9">
+
+    <Grid.Resources>
+        <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="Brush.Border" Color="#FFE2E8F0" />
+        <SolidColorBrush x:Key="Brush.Text" Color="#FF0F172A" />
+        <SolidColorBrush x:Key="Brush.TextMuted" Color="#FF64748B" />
+        <SolidColorBrush x:Key="Brush.Accent" Color="#FF2563EB" />
+        <SolidColorBrush x:Key="Brush.AccentHover" Color="#FF1D4ED8" />
+        <SolidColorBrush x:Key="Brush.BubbleUser" Color="#FFEFF6FF" />
+        <SolidColorBrush x:Key="Brush.BubbleAssistant" Color="#FFF8FAFC" />
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="20" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="18,12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{StaticResource Brush.Accent}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource Brush.AccentHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate DataType="{x:Type vm:ChatLine}">
+            <Border Margin="0,0,0,10"
+                    Padding="14,12"
+                    CornerRadius="10"
+                    BorderThickness="1"
+                    BorderBrush="#FFE2E8F0"
+                    MaxWidth="520"
+                    HorizontalAlignment="Left">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource Brush.BubbleAssistant}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource Brush.BubbleUser}" />
+                                <Setter Property="BorderBrush" Value="#FFBFDBFE" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold"
+                               FontSize="11"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               Text="{Binding Speaker}" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="14"
+                               Foreground="{StaticResource Brush.Text}"
+                               TextWrapping="Wrap"
+                               Text="{Binding Text}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Grid.Resources>
+
+    <Grid Margin="16">
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                    <TextBlock Text="Conversa com o LLM"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Text}" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="13"
+                               Foreground="{StaticResource Brush.TextMuted}"
+                               TextWrapping="Wrap"
+                               Text="Usa o mesmo fornecedor que o Sketch (pluginsettings.json). Por agora é só orientação — sem acesso ao modelo." />
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,0,6,0">
+                    <ItemsControl ItemsSource="{Binding Messages}"
+                                  Focusable="False" />
+                </ScrollViewer>
+
+                <Grid Grid.Row="2" Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             MinHeight="76"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             Padding="12,10"
+                             BorderBrush="{StaticResource Brush.Border}"
+                             Foreground="{StaticResource Brush.Text}"
+                             Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Grid.Column="1"
+                            Content="Enviar"
+                            Style="{StaticResource PrimaryButton}"
+                            Margin="12,0,0,0"
+                            MinHeight="76"
+                            MinWidth="96"
+                            VerticalAlignment="Stretch"
+                            Command="{Binding SendCommand}" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Grid>

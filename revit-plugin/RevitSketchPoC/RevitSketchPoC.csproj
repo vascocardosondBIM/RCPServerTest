@@ -27,4 +27,16 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
+
+  <!-- WPF views as XAML text embedded at build time (avoids SDK MarkupCompile MC1000 on net48 + dotnet CLI). -->
+  <ItemGroup>
+    <Page Remove="Views\SketchUploadWindow.xaml" />
+    <Page Remove="Views\LlmChatWindow.xaml" />
+    <EmbeddedResource Include="Views\SketchUploadWindow.xaml">
+      <LogicalName>RevitSketchPoC.Views.SketchUploadWindow.xaml</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Views\LlmChatWindow.xaml">
+      <LogicalName>RevitSketchPoC.Views.LlmChatWindow.xaml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

@@ -9,26 +9,26 @@ using System.Windows.Media;
 
 namespace RevitSketchPoC.Views
 {
-    public sealed class SketchUploadWindow : Window
+    public sealed class LlmChatWindow : Window
     {
-        private const string LayoutResourceName = "RevitSketchPoC.Views.SketchUploadWindow.xaml";
+        private const string LayoutResourceName = "RevitSketchPoC.Views.LlmChatWindow.xaml";
 
-        public SketchUploadViewModel ViewModel { get; }
+        public LlmChatViewModel ViewModel { get; }
 
-        public SketchUploadWindow()
+        public LlmChatWindow(LlmChatViewModel viewModel)
         {
-            Title = "Sketch to BIM (PoC)";
-            Width = 760;
-            Height = 580;
-            MinWidth = 580;
-            MinHeight = 440;
+            ViewModel = viewModel;
+            Title = "Assistente IA";
+            Width = 580;
+            Height = 540;
+            MinWidth = 420;
+            MinHeight = 380;
             ResizeMode = ResizeMode.CanResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Brushes.White;
             FontFamily = new FontFamily("Segoe UI");
 
-            ViewModel = new SketchUploadViewModel();
-            DataContext = ViewModel;
+            DataContext = viewModel;
             Content = LoadLayoutFromXaml();
             Closing += OnClosingWhileBusy;
         }
@@ -40,7 +40,7 @@ namespace RevitSketchPoC.Views
             var root = XamlReader.Load(stream);
             if (root is not UIElement element)
             {
-                throw new InvalidOperationException("SketchUploadWindow.xaml root must be a UIElement.");
+                throw new InvalidOperationException("LlmChatWindow.xaml root must be a UIElement.");
             }
 
             return element;
@@ -56,7 +56,7 @@ namespace RevitSketchPoC.Views
 
             foreach (var name in asm.GetManifestResourceNames())
             {
-                if (name.EndsWith("SketchUploadWindow.xaml", StringComparison.OrdinalIgnoreCase))
+                if (name.EndsWith("LlmChatWindow.xaml", StringComparison.OrdinalIgnoreCase))
                 {
                     stream = asm.GetManifestResourceStream(name);
                     if (stream != null)
@@ -76,7 +76,6 @@ namespace RevitSketchPoC.Views
             if (ViewModel.IsBusy)
             {
                 e.Cancel = true;
-                ViewModel.AppendStatus("Aguarda o processo terminar (ou cancelação futura) antes de fechar.");
             }
         }
     }

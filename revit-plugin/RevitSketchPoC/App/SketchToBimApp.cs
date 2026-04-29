@@ -70,7 +70,14 @@ namespace RevitSketchPoC.App
                 assemblyPath,
                 typeof(SketchUploadExternalCommand).FullName);
 
+            var chatButton = new PushButtonData(
+                "LlmChatButton",
+                "AI Chat",
+                assemblyPath,
+                typeof(LlmChatExternalCommand).FullName);
+
             panel.AddItem(pushButton);
+            panel.AddItem(chatButton);
         }
     }
 }
