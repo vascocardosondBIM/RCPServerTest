@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using Autodesk.Revit.UI;
 using Microsoft.Win32;
 using RevitSketchPoC.App;
+using RevitSketchPoC.Core.Configuration;
 using RevitSketchPoC.Core.ViewModels;
 using RevitSketchPoC.Chat.Contracts;
 using RevitSketchPoC.Chat.Services;
@@ -100,6 +101,7 @@ namespace RevitSketchPoC.Chat.ViewModels
         private const long MaxImageBytes = 6 * 1024 * 1024;
 
         private readonly LlmChatService _chat;
+        private readonly PluginSettings _pluginSettings;
         private readonly UIDocument _uidoc;
         private readonly Dispatcher _uiDispatcher;
         private string _input = string.Empty;
@@ -119,9 +121,10 @@ namespace RevitSketchPoC.Chat.ViewModels
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public LlmChatViewModel(LlmChatService chat, UIDocument uidoc, Dispatcher uiDispatcher)
+        public LlmChatViewModel(LlmChatService chat, PluginSettings pluginSettings, UIDocument uidoc, Dispatcher uiDispatcher)
         {
             _chat = chat;
+            _pluginSettings = pluginSettings;
             _uidoc = uidoc;
             _uiDispatcher = uiDispatcher;
             _sendCommand = new RelayCommand(_ => _ = SendAsync(), _ => CanSend());
@@ -395,6 +398,7 @@ namespace RevitSketchPoC.Chat.ViewModels
                 _uidoc,
                 ops,
                 _uiDispatcher,
+                _pluginSettings,
                 summary => Messages.Add(new ChatLine { IsUser = false, Text = "[Revit] " + summary }));
             ev.Raise();
         }

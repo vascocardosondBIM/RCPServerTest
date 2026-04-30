@@ -4,6 +4,7 @@ using RevitSketchPoC.Chat.Services;
 using RevitSketchPoC.Core.Configuration;
 using RevitSketchPoC.Integration.Rpc;
 using RevitSketchPoC.Integration.Routing;
+using RevitSketchPoC.RevitOperations.SketchBuild;
 using RevitSketchPoC.Sketch.Commands;
 using RevitSketchPoC.Sketch.Services;
 using System;

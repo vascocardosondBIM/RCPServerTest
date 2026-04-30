@@ -1,6 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using RevitSketchPoC.Core.Configuration;
+using RevitSketchPoC.RevitOperations.SketchBuild;
 using RevitSketchPoC.Sketch.Services;
 using RevitSketchPoC.Sketch.Views;
 using System;

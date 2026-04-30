@@ -29,6 +29,12 @@ namespace RevitSketchPoC.Chat.Services
             "- set_parameter: elementId (integer), value (string for SetValueString), and parameterName (localized name as in the context JSON) and/or builtInParameter (e.g. WALL_BASE_CONSTRAINT). For levels/refs use the level name as shown in \"value\" in the context.\n" +
             "- delete_elements: elementIds (array of integers)\n" +
             "- select_elements: elementIds (array of integers)\n" +
+            "- create_wall: startX, startY, endX, endY (numbers, metres in project XY, same as sketch upload); optional heightMeters, levelName, wallTypeName (match names from context).\n" +
+            "- create_room: centerX, centerY (metres) or center { x, y }; optional name, levelName.\n" +
+            "- create_door: locationX, locationY (metres) or location { x, y }; optional hostWallId (integer wall id from context); optional levelName. If hostWallId is omitted, the nearest wall on that level is used.\n" +
+            "- change_element_level: default when the user wants to move elements to another level without keeping world position. Same ids/level fields as below; optional preserveWorldPosition (boolean, default false) or preservePosition — set true only when the user explicitly asks to keep the same XYZ in the model.\n" +
+            "- change_level_preserve_position: same fields as change_element_level but always preserves world Z (equivalent to preserveWorldPosition true). Use when the user clearly wants height/position unchanged in space.\n" +
+            "  Common fields for both: elementIds (array) and/or elementId; targetLevelName or targetLevelId. Supported: FamilyInstance (level-hosted), Wall, Floor, Ceiling.\n" +
             "Use only element ids from the Revit context when possible. Prefer few, safe operations; the user can run the chat again.";
 
         private readonly PluginSettings _settings;

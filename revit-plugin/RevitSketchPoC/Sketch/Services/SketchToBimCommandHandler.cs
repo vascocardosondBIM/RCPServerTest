@@ -1,4 +1,5 @@
 using Autodesk.Revit.UI;
+using RevitSketchPoC.RevitOperations.SketchBuild;
 using RevitSketchPoC.Sketch.Contracts;
 using System.Threading.Tasks;
 

@@ -29,7 +29,7 @@ namespace RevitSketchPoC.Chat.Commands
                 var settings = PluginSettingsLoader.Load(assemblyDir);
                 var chat = new LlmChatService(settings);
                 var window = new LlmChatWindow();
-                var vm = new LlmChatViewModel(chat, uidoc, window.Dispatcher);
+                var vm = new LlmChatViewModel(chat, settings, uidoc, window.Dispatcher);
                 window.SetViewModel(vm);
                 window.Show();
                 return Result.Succeeded;
