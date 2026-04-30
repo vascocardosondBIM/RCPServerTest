@@ -2,6 +2,16 @@
 
 Servidor MCP (Node.js) para interagir com o Autodesk Revit a partir de assistentes de IA (Claude, Cursor, etc.).
 
+### Estrutura rápida do repositório
+
+| Pasta / ficheiro | Conteúdo |
+| --- | --- |
+| **`revit-plugin/RevitSketchPoC/`** | Add-in Revit (C# / WPF): sketch→BIM, assistente IA, TCP para `create_house_from_sketch`. **Lê o [`README.md`](revit-plugin/RevitSketchPoC/README.md) dentro desta pasta** para mapa de diretórios e instalação. |
+| **`package.json` / código Node na raiz** | Servidor MCP em Node que faz bridge para o(s) plugin(s) Revit por TCP (`npm install`, `npm run build`). |
+| **`README.md` (raiz)** | Este ficheiro — visão geral MCP, portas, tools. |
+
+---
+
 Este repositório contém **duas coisas** que convém distinguir:
 
 1. **O MCP “original” (bridge Node)** — alinhado com o ecossistema [mcp-servers-for-revit](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit): expõe operações do Revit como **ferramentas MCP**; o servidor fala com o **plugin Revit oficial** por **TCP** (por defeito porta `8080`), não por WebSocket neste fluxo de bridge.
@@ -89,7 +99,7 @@ npm run build
 
 ## Sketch PoC (C# / WPF)
 
-A implementação **atual** e suportada está em **`revit-plugin/RevitSketchPoC/`** (UI, router MCP TCP, Ollama/Gemini, transações Revit). A pasta `samples/RevitSketchPoC/` pode existir como referência antiga; segue o README do plugin em `revit-plugin/RevitSketchPoC/README.md`.
+A implementação **atual** e suportada está em **`revit-plugin/RevitSketchPoC/`** (UI, router MCP TCP, Ollama/Gemini, transações Revit). O **`revit-plugin/RevitSketchPoC/README.md`** descreve **o que cada pasta do projeto C# faz** (`Core/`, `Chat/`, `Sketch/`, `RevitOperations/`, `Integration/`, `deploy/`) e os fluxos Sketch vs. chat vs. MCP. A pasta `samples/RevitSketchPoC/` pode existir como referência antiga.
 
 Fluxo resumido:
 
