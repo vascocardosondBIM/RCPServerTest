@@ -18,14 +18,14 @@ namespace RevitSketchPoC.Sketch.Services
             var applyHandler = SketchToBimApp.ApplySketchHandler;
             if (applyEvent == null || applyHandler == null)
             {
-                Ui(window, w => w.ViewModel.AppendStatus("Erro: o plugin nÃ£o expÃ´s o ExternalEvent. Reinicia o Revit."));
+                Ui(window, w => w.ViewModel.AppendStatus("Erro: o plugin não expõe o ExternalEvent. Reinicia o Revit."));
                 return;
             }
 
             window.ViewModel.IsBusy = true;
             window.ViewModel.ClearStatus();
-            window.ViewModel.AppendStatus("Passo 1/3 â€” A preparar pedido (imagem + instruÃ§Ãµes).");
-            window.ViewModel.AppendStatus("Passo 2/3 â€” A enviar ao Ollama em segundo plano (o Revit deve continuar a responder; pode demorar).");
+            window.ViewModel.AppendStatus("Passo 1/3 — A preparar pedido (imagem + instruções).");
+            window.ViewModel.AppendStatus("Passo 2/3 — A enviar ao Ollama em segundo plano (o Revit deve continuar a responder; pode demorar).");
 
             var builder = pipeline.Builder;
 
@@ -35,7 +35,24 @@ namespace RevitSketchPoC.Sketch.Services
                 {
                     var interpretation = pipeline.InterpretOnlyAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
                     Ui(window, w => w.ViewModel.AppendStatus("Resposta do modelo recebida."));
-                    Ui(window, w => w.ViewModel.AppendStatus("Passo 3/3 â€” A criar paredes/quartos/portas no Revit (thread principal)..."));
+
+                    if (request.ShowPreviewUi)
+                    {
+                        var accepted = false;
+                        window.Dispatcher.Invoke(
+                            new Action(() => { accepted = SketchInterpretationPreviewWindow.ConfirmWithUser(window, request, interpretation); }));
+                        if (!accepted)
+                        {
+                            Ui(window, w =>
+                            {
+                                w.ViewModel.IsBusy = false;
+                                w.ViewModel.AppendStatus("Cancelado na pré-visualização. Ajusta o prompt ou a imagem e tenta de novo.");
+                            });
+                            return;
+                        }
+                    }
+
+                    Ui(window, w => w.ViewModel.AppendStatus("Passo 3/3 — A criar paredes/quartos/portas no Revit (thread principal)..."));
                     applyHandler.PrepareSuccess(uidoc, request, interpretation, builder, window);
                     applyEvent.Raise();
                 }

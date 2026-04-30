@@ -166,8 +166,12 @@
                                   VerticalAlignment="Center"
                                   IsChecked="{Binding AutoCreateRooms}" />
                         <CheckBox Content="Criar portas"
+                                  Margin="0,0,20,0"
                                   VerticalAlignment="Center"
                                   IsChecked="{Binding AutoCreateDoors}" />
+                        <CheckBox Content="Pré-visualizar antes de aplicar"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding ShowInterpretationPreview}" />
                     </StackPanel>
                     <TextBlock Style="{StaticResource FieldLabel}" Text="Estado" Margin="0,0,0,6" />
                     <TextBox MinHeight="160"

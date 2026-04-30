@@ -56,7 +56,7 @@ namespace RevitSketchPoC.Sketch.Services
                 {
                     throw new InvalidOperationException(
                         "Ollama recusou o pedido (" + (int)response.StatusCode + ").\n\n" +
-                        "Confirma que o Ollama estÃ¡ a correr e que fizeste `ollama pull " + model + "`.\n" +
+                        "Confirma que o Ollama está a correr e que fizeste `ollama pull " + model + "`.\n" +
                         "URL: " + url + "\n\n---\n" + payload);
                 }
 

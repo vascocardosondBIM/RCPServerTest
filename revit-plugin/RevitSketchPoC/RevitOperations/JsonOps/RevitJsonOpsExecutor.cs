@@ -12,10 +12,9 @@ using System.Text;
 
 namespace RevitSketchPoC.RevitOperations.JsonOps
 {
-    /// <summary>Runs a bounded set of Revit mutations from LLM-produced JSON ops (shared by chat and other features).</summary>
+    /// <summary>Runs Revit mutations from LLM-produced JSON ops (shared by chat and other features). All array entries are attempted.</summary>
     public static class RevitJsonOpsExecutor
     {
-        public const int MaxOps = 40;
         public const int MaxIdsPerOp = 50;
 
         public static string Execute(UIDocument uidoc, JArray ops, PluginSettings? pluginSettings = null)
@@ -23,7 +22,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
             var settings = pluginSettings ?? new PluginSettings();
             var doc = uidoc.Document;
             var log = new StringBuilder();
-            var n = Math.Min(ops.Count, MaxOps);
+            var n = ops.Count;
             var ok = 0;
             var fail = 0;
             var selectOps = new List<JObject>();

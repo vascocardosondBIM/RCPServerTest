@@ -13,6 +13,11 @@ namespace RevitSketchPoC.Chat.Services
     /// </summary>
     public static class RevitChatContextBuilder
     {
+        private const int MaxGeometryWalls = 150;
+        private const int MaxGeometryDoors = 100;
+        private const int MaxGeometryWindows = 100;
+        private const int MaxGeometryRooms = 50;
+
         private static readonly BuiltInCategory[] CountCategories =
         {
             BuiltInCategory.OST_Walls,
@@ -84,8 +89,280 @@ namespace RevitSketchPoC.Chat.Services
                 ["note"] = "Counts are non-type instances only. Use element ids from selection context when provided."
             };
 
+            payload["planGeometryInActiveView"] = TryBuildPlanGeometryInActiveView(uidoc);
+
             return JsonConvert.SerializeObject(payload, Formatting.Indented);
         }
+
+        /// <summary>
+        /// Wall/door/window/room endpoints in model XY as metres (same convention as sketch create_wall), scoped to elements visible in the active view when it is a plan view.
+        /// </summary>
+        private static object? TryBuildPlanGeometryInActiveView(UIDocument uidoc)
+        {
+            var doc = uidoc.Document;
+            var view = uidoc.ActiveView;
+            if (view == null)
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["omitted"] = true,
+                    ["reason"] = "No active view."
+                };
+            }
+
+            if (view is not ViewPlan)
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["omitted"] = true,
+                    ["reason"] = "Active view is not a plan (e.g. floor plan). Open a plan view for XY geometry; counts above still apply."
+                };
+            }
+
+            try
+            {
+                var collector = new FilteredElementCollector(doc, view.Id);
+                var wallsOut = new List<Dictionary<string, object?>>();
+                var doorsOut = new List<Dictionary<string, object?>>();
+                var windowsOut = new List<Dictionary<string, object?>>();
+                var roomsOut = new List<Dictionary<string, object?>>();
+                double? minX = null, minY = null, maxX = null, maxY = null;
+
+                void ExpandFootprint(double x, double y)
+                {
+                    minX = minX.HasValue ? Math.Min(minX.Value, x) : x;
+                    minY = minY.HasValue ? Math.Min(minY.Value, y) : y;
+                    maxX = maxX.HasValue ? Math.Max(maxX.Value, x) : x;
+                    maxY = maxY.HasValue ? Math.Max(maxY.Value, y) : y;
+                }
+
+                foreach (var el in collector)
+                {
+                    if (el is Wall wall && wallsOut.Count < MaxGeometryWalls)
+                    {
+                        var row = SerializeWallGeometry(doc, wall, ExpandFootprint);
+                        if (row != null)
+                        {
+                            wallsOut.Add(row);
+                        }
+                    }
+                }
+
+                foreach (var el in collector)
+                {
+                    if (el is FamilyInstance fi)
+                    {
+                        if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_Doors && doorsOut.Count < MaxGeometryDoors)
+                        {
+                            var row = SerializeDoorGeometry(doc, fi, ExpandFootprint);
+                            if (row != null)
+                            {
+                                doorsOut.Add(row);
+                            }
+                        }
+                        else if (fi.Category?.BuiltInCategory == BuiltInCategory.OST_Windows &&
+                                 windowsOut.Count < MaxGeometryWindows)
+                        {
+                            var row = SerializeWindowGeometry(doc, fi, ExpandFootprint);
+                            if (row != null)
+                            {
+                                windowsOut.Add(row);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var el in collector)
+                {
+                    if (el is SpatialElement sp &&
+                        sp.Category?.BuiltInCategory == BuiltInCategory.OST_Rooms &&
+                        roomsOut.Count < MaxGeometryRooms)
+                    {
+                        var row = SerializeRoomGeometry(doc, sp, ExpandFootprint);
+                        if (row != null)
+                        {
+                            roomsOut.Add(row);
+                        }
+                    }
+                }
+
+                Dictionary<string, object?>? footprint = null;
+                if (minX.HasValue && minY.HasValue && maxX.HasValue && maxY.HasValue)
+                {
+                    footprint = new Dictionary<string, object?>
+                    {
+                        ["minX"] = RoundM(minX.Value),
+                        ["minY"] = RoundM(minY.Value),
+                        ["maxX"] = RoundM(maxX.Value),
+                        ["maxY"] = RoundM(maxY.Value)
+                    };
+                }
+
+                var totalWalls = new FilteredElementCollector(doc, view.Id).OfClass(typeof(Wall)).GetElementCount();
+                var totalDoors = new FilteredElementCollector(doc, view.Id).OfCategory(BuiltInCategory.OST_Doors).GetElementCount();
+                var totalWindows = new FilteredElementCollector(doc, view.Id).OfCategory(BuiltInCategory.OST_Windows).GetElementCount();
+                var totalRooms = new FilteredElementCollector(doc, view.Id).OfCategory(BuiltInCategory.OST_Rooms).GetElementCount();
+
+                return new Dictionary<string, object?>
+                {
+                    ["viewName"] = view.Name,
+                    ["coordinateSystem"] =
+                        "Model XY in metres (internal Revit feet converted). Same XY convention as create_wall / sketch upload.",
+                    ["walls"] = wallsOut,
+                    ["doors"] = doorsOut,
+                    ["windows"] = windowsOut,
+                    ["rooms"] = roomsOut,
+                    ["footprintMeters"] = footprint,
+                    ["truncation"] = new Dictionary<string, object?>
+                    {
+                        ["wallsReturned"] = wallsOut.Count,
+                        ["wallsInView"] = totalWalls,
+                        ["doorsReturned"] = doorsOut.Count,
+                        ["doorsInView"] = totalDoors,
+                        ["windowsReturned"] = windowsOut.Count,
+                        ["windowsInView"] = totalWindows,
+                        ["roomsReturned"] = roomsOut.Count,
+                        ["roomsInView"] = totalRooms
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["omitted"] = true,
+                    ["reason"] = "Geometry export failed: " + ex.Message
+                };
+            }
+        }
+
+        private static Dictionary<string, object?>? SerializeWallGeometry(
+            Document doc,
+            Wall wall,
+            Action<double, double> expandFootprint)
+        {
+            if (wall.Location is not LocationCurve lc || lc.Curve is not Line line)
+            {
+                return null;
+            }
+
+            var s = line.GetEndPoint(0);
+            var e = line.GetEndPoint(1);
+            var sx = InternalToMeters(s.X);
+            var sy = InternalToMeters(s.Y);
+            var ex = InternalToMeters(e.X);
+            var ey = InternalToMeters(e.Y);
+            expandFootprint(sx, sy);
+            expandFootprint(ex, ey);
+            var lvl = wall.LevelId != ElementId.InvalidElementId ? doc.GetElement(wall.LevelId) as Level : null;
+            return new Dictionary<string, object?>
+            {
+                ["elementId"] = wall.Id.IntegerValue,
+                ["startX"] = RoundM(sx),
+                ["startY"] = RoundM(sy),
+                ["endX"] = RoundM(ex),
+                ["endY"] = RoundM(ey),
+                ["lengthMeters"] = RoundM(InternalToMeters(line.Length)),
+                ["levelName"] = lvl?.Name
+            };
+        }
+
+        private static Dictionary<string, object?>? SerializeDoorGeometry(
+            Document doc,
+            FamilyInstance fi,
+            Action<double, double> expandFootprint)
+        {
+            if (fi.Location is not LocationPoint lp)
+            {
+                return null;
+            }
+
+            var p = lp.Point;
+            var x = InternalToMeters(p.X);
+            var y = InternalToMeters(p.Y);
+            expandFootprint(x, y);
+            var lvl = fi.LevelId != ElementId.InvalidElementId ? doc.GetElement(fi.LevelId) as Level : null;
+            var hostWall = fi.Host as Wall;
+            return new Dictionary<string, object?>
+            {
+                ["elementId"] = fi.Id.IntegerValue,
+                ["locationX"] = RoundM(x),
+                ["locationY"] = RoundM(y),
+                ["hostWallId"] = hostWall != null ? hostWall.Id.IntegerValue : null,
+                ["levelName"] = lvl?.Name,
+                ["symbolName"] = fi.Symbol?.Name
+            };
+        }
+
+        private static Dictionary<string, object?>? SerializeWindowGeometry(
+            Document doc,
+            FamilyInstance fi,
+            Action<double, double> expandFootprint)
+        {
+            if (fi.Location is not LocationPoint lp)
+            {
+                return null;
+            }
+
+            var p = lp.Point;
+            var x = InternalToMeters(p.X);
+            var y = InternalToMeters(p.Y);
+            expandFootprint(x, y);
+            var lvl = fi.LevelId != ElementId.InvalidElementId ? doc.GetElement(fi.LevelId) as Level : null;
+            var hostWall = fi.Host as Wall;
+            return new Dictionary<string, object?>
+            {
+                ["elementId"] = fi.Id.IntegerValue,
+                ["locationX"] = RoundM(x),
+                ["locationY"] = RoundM(y),
+                ["hostWallId"] = hostWall != null ? hostWall.Id.IntegerValue : null,
+                ["levelName"] = lvl?.Name,
+                ["symbolName"] = fi.Symbol?.Name
+            };
+        }
+
+        private static Dictionary<string, object?>? SerializeRoomGeometry(
+            Document doc,
+            SpatialElement room,
+            Action<double, double> expandFootprint)
+        {
+            if (room.Location is not LocationPoint lp)
+            {
+                return null;
+            }
+
+            var p = lp.Point;
+            var x = InternalToMeters(p.X);
+            var y = InternalToMeters(p.Y);
+            expandFootprint(x, y);
+            var lvl = room.LevelId != ElementId.InvalidElementId ? doc.GetElement(room.LevelId) as Level : null;
+            double areaM;
+            try
+            {
+                areaM = UnitUtils.ConvertFromInternalUnits(room.Area, UnitTypeId.SquareMeters);
+            }
+            catch
+            {
+                areaM = 0;
+            }
+
+            return new Dictionary<string, object?>
+            {
+                ["elementId"] = room.Id.IntegerValue,
+                ["centerX"] = RoundM(x),
+                ["centerY"] = RoundM(y),
+                ["name"] = string.IsNullOrWhiteSpace(room.Name) ? "Room" : room.Name,
+                ["areaSquareMeters"] = RoundM(areaM),
+                ["levelName"] = lvl?.Name
+            };
+        }
+
+        private static double InternalToMeters(double internalFeet)
+        {
+            return UnitUtils.ConvertFromInternalUnits(internalFeet, UnitTypeId.Meters);
+        }
+
+        private static double RoundM(double v) => Math.Round(v, 3);
 
         /// <summary>Detailed snapshot of current selection (capped).</summary>
         public static string BuildSelectionSnapshot(UIDocument uidoc, int maxElements = 24, int maxParamsPerElement = 120)
@@ -122,7 +399,7 @@ namespace RevitSketchPoC.Chat.Services
             if (total > elements.Count)
             {
                 payload["truncated"] = true;
-                payload["note"] = "Lista truncada; pede ao utilizador para reduzir a seleÃ§Ã£o ou filtrar por categoria se precisares de todos.";
+                payload["note"] = "Lista truncada; pede ao utilizador para reduzir a seleção ou filtrar por categoria se precisares de todos.";
             }
 
             return JsonConvert.SerializeObject(payload, Formatting.Indented);

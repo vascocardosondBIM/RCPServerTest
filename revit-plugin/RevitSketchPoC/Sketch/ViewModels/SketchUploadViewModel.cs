@@ -16,6 +16,7 @@ namespace RevitSketchPoC.Sketch.ViewModels
         private string _prompt = "Create walls, rooms and doors from this sketch.";
         private bool _autoCreateRooms = true;
         private bool _autoCreateDoors = true;
+        private bool _showInterpretationPreview = true;
         private bool _isBusy;
         private readonly RelayCommand _runCommand;
 
@@ -93,6 +94,17 @@ namespace RevitSketchPoC.Sketch.ViewModels
             }
         }
 
+        /// <summary>When true, shows a side-by-side preview of the image vs. LLM interpretation before creating elements in Revit.</summary>
+        public bool ShowInterpretationPreview
+        {
+            get => _showInterpretationPreview;
+            set
+            {
+                _showInterpretationPreview = value;
+                OnPropertyChanged();
+            }
+        }
+
         public bool IsBusy
         {
             get => _isBusy;
@@ -140,7 +152,7 @@ namespace RevitSketchPoC.Sketch.ViewModels
                 Prompt = Prompt,
                 AutoCreateRooms = AutoCreateRooms,
                 AutoCreateDoors = AutoCreateDoors,
-                ShowPreviewUi = true
+                ShowPreviewUi = ShowInterpretationPreview
             });
         }
 

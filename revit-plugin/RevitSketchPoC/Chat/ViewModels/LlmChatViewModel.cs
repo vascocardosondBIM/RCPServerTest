@@ -108,7 +108,7 @@ namespace RevitSketchPoC.Chat.ViewModels
         private bool _isBusy;
         private string _projectContext = string.Empty;
         private string _selectionContext = string.Empty;
-        private string _contextHint = "A carregar contexto do projetoâ€¦";
+        private string _contextHint = "A carregar contexto do projeto…";
         private string? _pendingImagePath;
         private readonly RelayCommand _sendCommand;
         private readonly RelayCommand _refreshProjectCommand;
@@ -220,7 +220,7 @@ namespace RevitSketchPoC.Chat.ViewModels
             {
                 if (!IsDocumentAlive())
                 {
-                    ContextHint = "Documento nÃ£o disponÃ­vel.";
+                    ContextHint = "Documento não disponível.";
                     _projectContext = string.Empty;
                     return;
                 }
@@ -241,7 +241,7 @@ namespace RevitSketchPoC.Chat.ViewModels
             {
                 if (!IsDocumentAlive())
                 {
-                    ContextHint = "Documento nÃ£o disponÃ­vel.";
+                    ContextHint = "Documento não disponível.";
                     return;
                 }
 
@@ -253,18 +253,18 @@ namespace RevitSketchPoC.Chat.ViewModels
                 }
 
                 _selectionContext = RevitChatContextBuilder.BuildSelectionSnapshot(_uidoc);
-                ContextHint = "SeleÃ§Ã£o incluÃ­da no contexto (" + n + " elemento(s)) â€” " + DateTime.Now.ToString("HH:mm") + ".";
+                ContextHint = "Seleção incluída no contexto (" + n + " elemento(s)) – " + DateTime.Now.ToString("HH:mm") + ".";
             }
             catch (Exception ex)
             {
-                ContextHint = "Erro ao ler seleÃ§Ã£o: " + ex.Message;
+                ContextHint = "Erro ao ler seleção: " + ex.Message;
             }
         }
 
         public void ClearSelectionContext()
         {
             _selectionContext = string.Empty;
-            ContextHint = "Contexto de seleÃ§Ã£o limpo.";
+            ContextHint = "Contexto de seleção limpo.";
         }
 
         private void AttachImage()
@@ -281,12 +281,12 @@ namespace RevitSketchPoC.Chat.ViewModels
                     var info = new FileInfo(dlg.FileName);
                     if (info.Length > MaxImageBytes)
                     {
-                        ContextHint = "Imagem demasiado grande (mÃ¡x. ~6 MB).";
+                        ContextHint = "Imagem demasiado grande (máx. ~6 MB).";
                         return;
                     }
 
                     PendingImagePath = dlg.FileName;
-                    ContextHint = "Imagem pronta para enviar com a prÃ³xima mensagem.";
+                    ContextHint = "Imagem pronta para enviar com a próxima mensagem.";
                 }
                 catch (Exception ex)
                 {
@@ -389,7 +389,7 @@ namespace RevitSketchPoC.Chat.ViewModels
                 Messages.Add(new ChatLine
                 {
                     IsUser = false,
-                    Text = "[Revit] Add-in nÃ£o expÃ´s ExternalEvent para executar operaÃ§Ãµes."
+                    Text = "[Revit] O add-in não expõe ExternalEvent para executar operações."
                 });
                 return;
             }

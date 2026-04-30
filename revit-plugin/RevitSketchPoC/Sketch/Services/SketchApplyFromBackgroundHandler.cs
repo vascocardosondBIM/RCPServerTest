@@ -86,7 +86,7 @@ namespace RevitSketchPoC.Sketch.Services
                     w.Close();
                 }, () =>
                 {
-                    MessageBox.Show(error, "Sketch to BIM â€” Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(error, "Sketch to BIM — Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
                 return;
             }
@@ -99,7 +99,7 @@ namespace RevitSketchPoC.Sketch.Services
             try
             {
                 var result = builder.Build(uiDocument, request, interpretation);
-                var summary = "ConcluÃ­do. Paredes: " + result.WallsCreated +
+                var summary = "Concluído. Paredes: " + result.WallsCreated +
                               ", Quartos: " + result.RoomsCreated +
                               ", Portas: " + result.DoorsCreated + ".";
                 FinishUi(ownerWindow, w =>
@@ -109,7 +109,7 @@ namespace RevitSketchPoC.Sketch.Services
                     w.Close();
                 }, () =>
                 {
-                    MessageBox.Show(summary, "Sketch to BIM â€” Done", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(summary, "Sketch to BIM — Done", MessageBoxButton.OK, MessageBoxImage.Information);
                 });
             }
             catch (Exception ex)
@@ -121,7 +121,7 @@ namespace RevitSketchPoC.Sketch.Services
                     w.Close();
                 }, () =>
                 {
-                    MessageBox.Show(ex.Message, "Sketch to BIM â€” Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(ex.Message, "Sketch to BIM — Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             }
         }
@@ -147,7 +147,7 @@ namespace RevitSketchPoC.Sketch.Services
 
         public string GetName()
         {
-            return "Sketch to BIM â€” apply from background";
+            return "Sketch to BIM — apply from background";
         }
     }
 }

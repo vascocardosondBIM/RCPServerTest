@@ -22,7 +22,16 @@ namespace RevitSketchPoC.Chat.Services
             "Answer clearly and concisely in the same language the user writes (Portuguese or English). " +
             "When a JSON block titled Revit context is provided, treat it as read-only facts from the open model: " +
             "do not invent element ids, names, or counts that contradict that data. " +
+            "If the JSON includes \"planGeometryInActiveView\" with walls/doors/windows/rooms arrays, use those coordinates (metres, model XY) to compare with a user sketch or to plan create_wall/create_door ops consistently. " +
             "If the user sends an image, describe or use what you see to help with Revit/BIM questions.\n\n" +
+            "### When the user attaches a floor plan, sketch, or screenshot AND wants it built or replicated in Revit\n" +
+            "- Your primary goal is FIDELITY to the drawing: same wall layout, proportions, and door openings as visible — do not invent a \"better\" house.\n" +
+            "- Use the same conventions as the Sketch-to-BIM tool: coordinates in METRES, origin (0,0) at the bottom-left of the outer footprint; walls axis-aligned unless the image clearly shows diagonals.\n" +
+            "- If the image shows numeric dimensions, honour them exactly in create_wall lengths. If not, pick one clear footprint size (from the user's text if given, e.g. 6x8 m) and scale all segments proportionally to the drawing; state that assumption in plain text before the JSON block.\n" +
+            "- Output create_wall segments in order: outer boundary first (closed loop), then interior partitions. Endpoints of meeting walls must share coordinates.\n" +
+            "- create_door only where a door or opening is visible on a wall; place the point at the middle of the opening. Do not add doors for circulation unless drawn.\n" +
+            "- create_room only for clearly closed zones; room names should match labels in the image when readable.\n" +
+            "- Prefer the dedicated Sketch-to-BIM command for complex full plans; use revitOps from chat for smaller or incremental copies.\n\n" +
             "When the user wants changes applied in Revit, include EXACTLY one fenced JSON code block using this shape (no extra keys at root):\n" +
             "```json\n{ \"revitOps\": [ { \"op\": \"set_parameter\", \"elementId\": 12345, \"parameterName\": \"Comments\", \"value\": \"text\" } ] }\n```\n" +
             "Allowed ops:\n" +
@@ -35,6 +44,7 @@ namespace RevitSketchPoC.Chat.Services
             "- change_element_level: default when the user wants to move elements to another level without keeping world position. Same ids/level fields as below; optional preserveWorldPosition (boolean, default false) or preservePosition — set true only when the user explicitly asks to keep the same XYZ in the model.\n" +
             "- change_level_preserve_position: same fields as change_element_level but always preserves world Z (equivalent to preserveWorldPosition true). Use when the user clearly wants height/position unchanged in space.\n" +
             "  Common fields for both: elementIds (array) and/or elementId; targetLevelName or targetLevelId. Supported: FamilyInstance (level-hosted), Wall, Floor, Ceiling.\n" +
+            "All revitOps in the JSON array are applied in one Revit transaction; very large batches can be slow or fail mid-run — prefer reasonable sizes or the Sketch-to-BIM flow for full floor plans.\n" +
             "Use only element ids from the Revit context when possible. Prefer few, safe operations; the user can run the chat again.";
 
         private readonly PluginSettings _settings;
@@ -129,7 +139,7 @@ namespace RevitSketchPoC.Chat.Services
                 {
                     throw new InvalidOperationException(
                         "Ollama recusou o pedido (" + (int)response.StatusCode + ").\n\n" +
-                        "Para imagens usa um modelo com visÃ£o (ex. llava, qwen2-vl). URL: " + url + "\n\n---\n" + payload);
+                        "Para imagens usa um modelo com visão (ex. llava, qwen2-vl). URL: " + url + "\n\n---\n" + payload);
                 }
 
                 return ExtractOllamaAssistantContent(payload);

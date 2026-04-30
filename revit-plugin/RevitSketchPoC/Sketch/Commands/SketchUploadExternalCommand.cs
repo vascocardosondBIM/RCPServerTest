@@ -28,7 +28,7 @@ namespace RevitSketchPoC.Sketch.Commands
                     var uiDoc = commandData.Application.ActiveUIDocument;
                     if (uiDoc == null)
                     {
-                        window.ViewModel.AppendStatus("Erro: nÃ£o hÃ¡ documento ativo.");
+                        window.ViewModel.AppendStatus("Erro: não há documento ativo.");
                         return;
                     }
 

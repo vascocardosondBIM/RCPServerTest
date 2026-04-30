@@ -114,8 +114,8 @@ namespace RevitSketchPoC.Sketch.Services
                 || lower.Contains("generate_content_free_tier"))
             {
                 summary.AppendLine();
-                summary.AppendLine(">>> ProvÃ¡vel limite do plano gratuito (RPM/RPD) ou quota esgotada.");
-                summary.AppendLine("    Espera alguns minutos, reduz pedidos, ou ativa faturaÃ§Ã£o / API key com quota maior na Google AI Studio.");
+                summary.AppendLine(">>> Provável limite do plano gratuito (RPM/RPD) ou quota esgotada.");
+                summary.AppendLine("    Espera alguns minutos, reduz pedidos, ou ativa faturação / API key com quota maior na Google AI Studio.");
             }
 
             summary.AppendLine();

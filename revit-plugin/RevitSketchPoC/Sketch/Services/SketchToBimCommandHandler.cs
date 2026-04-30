@@ -18,13 +18,13 @@ namespace RevitSketchPoC.Sketch.Services
 
         public RevitModelBuilder Builder => _builder;
 
-        /// <summary>HTTP / LLM only â€” safe to run on a thread-pool thread.</summary>
+        /// <summary>HTTP / LLM only — safe to run on a thread-pool thread.</summary>
         public Task<SketchInterpretation> InterpretOnlyAsync(SketchToBimRequest request)
         {
             return _interpreter.InterpretAsync(request);
         }
 
-        /// <summary>Revit DB changes only â€” must run on the Revit API thread.</summary>
+        /// <summary>Revit DB changes only — must run on the Revit API thread.</summary>
         public BuildResult BuildOnly(UIDocument uiDoc, SketchToBimRequest request, SketchInterpretation interpretation)
         {
             return _builder.Build(uiDoc, request, interpretation);
