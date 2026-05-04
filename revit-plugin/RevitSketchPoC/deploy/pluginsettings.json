@@ -2,8 +2,12 @@
   "TcpPort": 8081,
   "LlmProvider": "Ollama",
   "OllamaBaseUrl": "http://localhost:11434",
-  "OllamaModel": "qwen3.5:397b-cloud",
+  "OllamaModel": "gemma4:31b-cloud",
   "GeminiApiKey": "",
   "GeminiModel": "gemini-2.0-flash",
+  "LlmProvider": "Nvidia",
+  "NvidiaApiKey": "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",
+  "NvidiaModel": "google/gemma-3n-e4b-it",
+  "NvidiaChatCompletionsUrl": "",
   "DefaultWallHeightMeters": 3.0
 }

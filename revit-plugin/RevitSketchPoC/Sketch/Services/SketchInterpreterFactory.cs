@@ -21,8 +21,13 @@ namespace RevitSketchPoC.Sketch.Services
                 return new GeminiSketchInterpreter(settings);
             }
 
+            if (string.Equals(provider, "Nvidia", StringComparison.OrdinalIgnoreCase))
+            {
+                return new NvidiaSketchInterpreter(settings);
+            }
+
             throw new InvalidOperationException(
-                "Unknown LlmProvider in pluginsettings.json: \"" + provider + "\". Use \"Ollama\" or \"Gemini\".");
+                "Unknown LlmProvider in pluginsettings.json: \"" + provider + "\". Use \"Ollama\", \"Gemini\", or \"Nvidia\".");
         }
     }
 }

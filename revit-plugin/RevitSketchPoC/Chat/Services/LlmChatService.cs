@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RevitSketchPoC.Core;
 using RevitSketchPoC.Core.Configuration;
 using RevitSketchPoC.Chat.Contracts;
 using RevitSketchPoC.Sketch.Services;
@@ -7,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -74,8 +76,13 @@ namespace RevitSketchPoC.Chat.Services
                 return CompleteGeminiAsync(turns, revitContextForSystem);
             }
 
+            if (string.Equals(provider, "Nvidia", StringComparison.OrdinalIgnoreCase))
+            {
+                return CompleteNvidiaOpenAiAsync(turns, revitContextForSystem);
+            }
+
             throw new InvalidOperationException(
-                "Unknown LlmProvider in pluginsettings.json: \"" + provider + "\". Use \"Ollama\" or \"Gemini\".");
+                "Unknown LlmProvider in pluginsettings.json: \"" + provider + "\". Use \"Ollama\", \"Gemini\", or \"Nvidia\".");
         }
 
         private static string MergeSystemPrompt(string? revitContextForSystem)
@@ -227,6 +234,108 @@ namespace RevitSketchPoC.Chat.Services
             }
 
             return SketchInterpretationParser.ExtractAssistantTextFromGeminiResponse(payload);
+        }
+
+        private async Task<string> CompleteNvidiaOpenAiAsync(
+            IReadOnlyList<ChatLlmTurn> turns,
+            string? revitContextForSystem)
+        {
+            if (string.IsNullOrWhiteSpace(_settings.NvidiaApiKey))
+            {
+                throw new InvalidOperationException("NvidiaApiKey is empty. Set it in pluginsettings.json.");
+            }
+
+            var url = NormalizeNvidiaChatCompletionsUrl(_settings.NvidiaChatCompletionsUrl);
+            var model = string.IsNullOrWhiteSpace(_settings.NvidiaModel)
+                ? "google/gemma-3n-e4b-it"
+                : _settings.NvidiaModel.Trim();
+
+            var messages = new List<object>
+            {
+                new { role = "system", content = MergeSystemPrompt(revitContextForSystem) }
+            };
+
+            foreach (var turn in turns)
+            {
+                var trimmed = turn.Text?.Trim();
+                if (string.IsNullOrEmpty(trimmed) && string.IsNullOrEmpty(turn.ImageBase64))
+                {
+                    continue;
+                }
+
+                var text = string.IsNullOrEmpty(trimmed) ? "(image attached)" : trimmed;
+                if (turn.IsUser && !string.IsNullOrEmpty(turn.ImageBase64))
+                {
+                    var mime = string.IsNullOrWhiteSpace(turn.ImageMimeType) ? "image/png" : turn.ImageMimeType.Trim();
+                    var dataUrl = "data:" + mime + ";base64," + turn.ImageBase64;
+                    messages.Add(new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new { type = "text", text },
+                            new { type = "image_url", image_url = new { url = dataUrl } }
+                        }
+                    });
+                }
+                else
+                {
+                    messages.Add(new
+                    {
+                        role = turn.IsUser ? "user" : "assistant",
+                        content = text
+                    });
+                }
+            }
+
+            if (messages.Count <= 1)
+            {
+                throw new InvalidOperationException("No user/assistant messages to send.");
+            }
+
+            var body = new
+            {
+                model,
+                messages,
+                stream = false,
+                max_tokens = 8192,
+                temperature = 0.2,
+                top_p = 0.7,
+                frequency_penalty = 0.0,
+                presence_penalty = 0.0
+            };
+
+            var json = JsonConvert.SerializeObject(body);
+            using (var req = new HttpRequestMessage(HttpMethod.Post, url))
+            {
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.NvidiaApiKey.Trim());
+                req.Headers.Accept.ParseAdd("application/json");
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await Http.SendAsync(req).ConfigureAwait(false);
+                var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        "NVIDIA API error (" + (int)response.StatusCode + "). URL: " + url + "\n\n---\n" + payload);
+                }
+
+                return OpenAiChatCompletionParser.ExtractAssistantContent(payload);
+            }
+        }
+
+        private static string NormalizeNvidiaChatCompletionsUrl(string? url)
+        {
+            var u = string.IsNullOrWhiteSpace(url)
+                ? "https://integrate.api.nvidia.com/v1/chat/completions"
+                : url.Trim();
+            if (!u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                u = "https://" + u;
+            }
+
+            return u;
         }
 
         private static string ExtractOllamaAssistantContent(string payload)

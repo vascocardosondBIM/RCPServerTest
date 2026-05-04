@@ -5,5 +5,8 @@
   "OllamaModel": "llava",
   "GeminiApiKey": "",
   "GeminiModel": "gemini-2.0-flash",
+  "NvidiaApiKey": "",
+  "NvidiaModel": "google/gemma-3n-e4b-it",
+  "NvidiaChatCompletionsUrl": "",
   "DefaultWallHeightMeters": 3.0
 }
