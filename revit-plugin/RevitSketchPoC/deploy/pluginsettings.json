@@ -2,7 +2,7 @@
   "TcpPort": 8081,
   "LlmProvider": "Ollama",
   "OllamaBaseUrl": "http://localhost:11434",
-  "OllamaModel": "qwen3.5:397b-cloud",
+  "OllamaModel": "gemma4:31b-cloud",
   "GeminiApiKey": "",
   "GeminiModel": "gemini-2.0-flash",
   "DefaultWallHeightMeters": 3.0
