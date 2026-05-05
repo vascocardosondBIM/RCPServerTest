@@ -15,7 +15,7 @@ Servidor MCP (Node.js) para interagir com o Autodesk Revit a partir de assistent
 Este repositório contém **duas coisas** que convém distinguir:
 
 1. **O MCP “original” (bridge Node)** — alinhado com o ecossistema [mcp-servers-for-revit](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit): expõe operações do Revit como **ferramentas MCP**; o servidor fala com o **plugin Revit oficial** por **TCP** (por defeito porta `8080`), não por WebSocket neste fluxo de bridge.
-2. **A extensão deste fork** — **porta dupla** no bridge (`REVIT_PLUGIN_PORT` / `REVIT_SKETCH_PORT`) e o add-in separado **`RevitSketchPoC`** (C# / WPF) na pasta `revit-plugin/RevitSketchPoC/`, que escuta outra porta (por defeito `8081`) e trata apenas da tool **`create_house_from_sketch`** (interpretação de imagem + criação de paredes/quartos/portas no Revit), com **Ollama** ou **Gemini** configurável no plugin.
+2. **A extensão deste fork** — **porta dupla** no bridge (`REVIT_PLUGIN_PORT` / `REVIT_SKETCH_PORT`) e o add-in separado **`RevitSketchPoC`** (C# / WPF) na pasta `revit-plugin/RevitSketchPoC/`, que escuta outra porta (por defeito `8081`) e trata apenas da tool **`create_house_from_sketch`** (interpretação de imagem + criação de paredes/quartos/portas no Revit), com **Ollama**, **Gemini** ou **NVIDIA** (`integrate.api.nvidia.com`, OpenAI-compatible) configurável em `pluginsettings.json`.
 
 > [!NOTE]
 > Para o fluxo completo precisas do **plugin Revit original** (porta `8080`) e, se usares o sketch por MCP ou UI, do **RevitSketchPoC** (porta `8081`). Instruções do plugin oficial: [mcp-servers-for-revit](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit). Detalhe do PoC: [`revit-plugin/RevitSketchPoC/README.md`](revit-plugin/RevitSketchPoC/README.md).
@@ -23,7 +23,7 @@ Este repositório contém **duas coisas** que convém distinguir:
 ## Segurança e Git
 
 - **Não commits** ficheiros `.env`, chaves em JSON, nem cópias locais com segredos. O repositório inclui `.gitignore` para `node_modules/`, artefactos .NET (`bin/` / `obj/`), `.env*` e `pluginsettings.local.json`.
-- O ficheiro `deploy/pluginsettings.json` do PoC deve manter **`GeminiApiKey` vazio** no Git; usa uma cópia local ou segue o [`pluginsettings.example.json`](revit-plugin/RevitSketchPoC/deploy/pluginsettings.example.json) como modelo.
+- O ficheiro `deploy/pluginsettings.json` do PoC deve manter **`GeminiApiKey`** e **`NvidiaApiKey` vazios** no Git; usa uma cópia local ou segue o [`pluginsettings.example.json`](revit-plugin/RevitSketchPoC/deploy/pluginsettings.example.json) como modelo.
 
 ## Setup (cliente MCP)
 
@@ -87,7 +87,7 @@ A tool `create_house_from_sketch` usa `REVIT_SKETCH_PORT` (ou `data.pluginPort` 
 | `export_room_data` | Exportar dados de quartos |
 | `store_project_data` / `store_room_data` / `query_stored_data` | Metadados locais |
 | `send_code_to_revit` | Enviar C# para executar no Revit |
-| `create_house_from_sketch` | Imagem de esboço → interpretação LLM (**Ollama** ou **Gemini** no RevitSketchPoC) → paredes/quartos/portas |
+| `create_house_from_sketch` | Imagem de esboço → interpretação LLM (**Ollama**, **Gemini** ou **NVIDIA** no RevitSketchPoC, conforme `LlmProvider`) → paredes/quartos/portas |
 | `say_hello` | Teste de ligação |
 
 ## Desenvolvimento (Node)
@@ -99,12 +99,12 @@ npm run build
 
 ## Sketch PoC (C# / WPF)
 
-A implementação **atual** e suportada está em **`revit-plugin/RevitSketchPoC/`** (UI, router MCP TCP, Ollama/Gemini, transações Revit). O **`revit-plugin/RevitSketchPoC/README.md`** descreve **o que cada pasta do projeto C# faz** (`Core/`, `Chat/`, `Sketch/`, `RevitOperations/`, `Integration/`, `deploy/`) e os fluxos Sketch vs. chat vs. MCP. A pasta `samples/RevitSketchPoC/` pode existir como referência antiga.
+A implementação **atual** e suportada está em **`revit-plugin/RevitSketchPoC/`** (UI, router MCP TCP, backends Ollama / Gemini / NVIDIA, transações Revit). O **`revit-plugin/RevitSketchPoC/README.md`** descreve **o que cada pasta do projeto C# faz** (`Core/`, `Chat/`, `Sketch/`, `RevitOperations/`, `Integration/`, `deploy/`) e os fluxos Sketch vs. chat vs. MCP. A pasta `samples/RevitSketchPoC/` pode existir como referência antiga.
 
 Fluxo resumido:
 
 1. Utilizador envia imagem (ribbon **Sketch AI PoC** ou MCP `create_house_from_sketch`).
-2. O plugin chama o LLM (Ollama ou Gemini conforme `pluginsettings.json`).
+2. O plugin chama o LLM (**Ollama**, **Gemini** ou **NVIDIA** conforme `LlmProvider` e restantes campos em `pluginsettings.json`; o servidor MCP Node não escolhe o modelo).
 3. Resposta estruturada → criação de elementos numa `Transaction` no Revit.
 
 ## Licença

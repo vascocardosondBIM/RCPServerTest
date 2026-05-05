@@ -18,8 +18,8 @@ No **mesmo** servidor MCP Node: a maioria das tools fala com o plugin original e
 | Pasta | Função |
 | --- | --- |
 | **`Core/`** | Peças transversais: `Application/SketchToBimApp.cs` (classe `RevitSketchPoC.App.SketchToBimApp` — entrada do add-in, ribbon, `ExternalEvent`), `Configuration/PluginSettings.cs` (lê `pluginsettings.json`), `ViewModels/RelayCommand.cs`, `RevitModelessWindowHost.cs` (abrir janelas WPF no `Idling` para evitar erros com o Revit). |
-| **`Chat/`** | **Assistente IA** no Revit: comandos ribbon, `LlmChatService` (Ollama/Gemini), contexto JSON do projeto (`RevitChatContextBuilder`, incl. geometria em planta quando aplicável), parsing de `revitOps`, janela WPF embutida (`Views/`), markdown simples nas mensagens. |
-| **`Sketch/`** | **Sketch → BIM**: fluxo de imagem + prompt → LLM → JSON de paredes/divisões/portas; `SketchLlmPrompts`, intérpretes Ollama/Gemini, `SketchGenerationRunner`, **pré-visualização** (`SketchInterpretationPreviewWindow`) antes de aplicar, janela de upload (`SketchUploadWindow` + XAML embutido). |
+| **`Chat/`** | **Assistente IA** no Revit: comandos ribbon, `LlmChatService` (Ollama / Gemini / NVIDIA OpenAI-compatible), contexto JSON do projeto (`RevitChatContextBuilder`, incl. geometria em planta quando aplicável), parsing de `revitOps`, janela WPF embutida (`Views/`), markdown simples nas mensagens. |
+| **`Sketch/`** | **Sketch → BIM**: fluxo de imagem + prompt → LLM → JSON de paredes/divisões/portas; `SketchLlmPrompts`, intérpretes Ollama / Gemini / NVIDIA, `SketchGenerationRunner`, **pré-visualização** (`SketchInterpretationPreviewWindow`) antes de aplicar, janela de upload (`SketchUploadWindow` + XAML embutido). |
 | **`RevitOperations/`** | Operações sobre o modelo Revit usadas pelo sketch e pelo chat: **`CreateElements/`** (paredes, portas, salas), **`SketchBuild/`** (`RevitModelBuilder` — transação única após interpretação), **`JsonOps/`** (`RevitJsonOpsExecutor` — `revitOps` do chat), **`ChangeElements/`**, **`DeleteElements/`**, **`SelectElements/`**, **`Shared/`** (helpers partilhados). |
 | **`Integration/`** | Ligação **TCP JSON-RPC** ao bridge Node: **`Rpc/`** (servidor, dispatcher para API thread), **`Routing/`** (`McpCommandRouter` — método `create_house_from_sketch`), **`Contracts/`** (DTOs do protocolo). |
 | **`deploy/`** | Ficheiros para instalação: **`RevitSketchPoC.addin`**, **`pluginsettings.example.json`** (modelo sem segredos), e normalmente uma cópia local de **`pluginsettings.json`** (não commits com chaves). |
@@ -41,12 +41,14 @@ Ficheiros na **raiz desta pasta**: `RevitSketchPoC.csproj`, `RevitSketchPoC.sln`
 Coloca `pluginsettings.json` **na mesma pasta que a DLL** após o build (ou edita o que está em `deploy/` antes de copiar).
 
 - **`TcpPort`**: alinha com `REVIT_SKETCH_PORT` no Node (ex.: `8081`).
-- **`LlmProvider`**: `"Ollama"` ou `"Gemini"`.
-- **`OllamaBaseUrl`** / **`OllamaModel`**: no repositório o ficheiro `deploy/pluginsettings.json` pode refletir a configuração da tua máquina (modelo com visão, etc.). Não commits chaves ou dados sensíveis.
-- **`GeminiApiKey`**: deixa **vazio** no Git; preenche só em cópia local.
-- **`GeminiModel`**: ex. `gemini-2.0-flash`.
+- **`LlmProvider`**: `"Ollama"`, `"Gemini"` ou **`"Nvidia"`** (API [NVIDIA NIM](https://integrate.api.nvidia.com/), formato OpenAI `chat/completions`).
+- **`OllamaBaseUrl`** / **`OllamaModel`**: só quando `LlmProvider` é Ollama; modelo com **visão** para sketch (ex. `llava`). Não commits dados sensíveis.
+- **`GeminiApiKey`** / **`GeminiModel`**: só quando o provider é Gemini; chave **vazia** no Git, preenchida só localmente (ex. `gemini-2.0-flash`).
+- **`NvidiaApiKey`**: token Bearer (ex. `nvapi-...`); **vazio** no Git, preenchido só localmente quando usas NVIDIA.
+- **`NvidiaModel`**: id do modelo no catálogo NVIDIA (ex. `google/gemma-3n-e4b-it`). Para sketch multimodal, escolhe um modelo que suporte **imagem + texto** no endpoint de chat; modelos só texto falham nesse fluxo.
+- **`NvidiaChatCompletionsUrl`**: opcional; se vazio, usa `https://integrate.api.nvidia.com/v1/chat/completions`. Preenche apenas se a tua conta ou endpoint usarem outra URL base compatível com OpenAI.
 
-Para um clone limpo: copia `deploy/pluginsettings.example.json` para `pluginsettings.json` e edita modelo/porta.
+Para um clone limpo: copia `deploy/pluginsettings.example.json` para `pluginsettings.json` e edita provider, modelo e porta.
 
 ---
 
@@ -88,16 +90,32 @@ Output esperado: `bin\Release\RevitSketchPoC.dll`
 - O servidor MCP encaminha essa tool para `REVIT_SKETCH_PORT`.
 - Garante que `TcpPort` no JSON coincide com essa porta.
 
-### Fluxo MCP + Ollama
+### Fluxo MCP + LLM (no Revit)
 
-`Cliente IA → MCP (Node) → TCP :8081 → RevitSketchPoC → HTTP Ollama (ex. /api/chat)`
+O servidor Node **não** chama Ollama, Gemini nem NVIDIA; o **plugin C#** lê `pluginsettings.json` e faz o HTTP ao backend escolhido.
 
-O servidor Node **não** chama o Ollama; quem chama o LLM é o plugin C#.
+| Provider | Caminho típico |
+| --- | --- |
+| Ollama | `Cliente IA → MCP (Node) → TCP :8081 → RevitSketchPoC → HTTP Ollama (ex. /api/chat)` |
+| Gemini | `… → RevitSketchPoC → API Google Gemini` |
+| NVIDIA | `… → RevitSketchPoC → https://integrate.api.nvidia.com/v1/chat/completions` (ou URL em `NvidiaChatCompletionsUrl`) |
 
-## Ollama (recomendado para PoC sem chave cloud)
+## Ollama (recomendado para PoC local sem chave cloud)
 
 1. Instala [Ollama](https://ollama.com/) e garante o serviço em `localhost:11434`.
-2. Faz pull de um modelo com **visão** adequado ao teu `OllamaModel` (ex.: `ollama pull llava` se usares `llava` no JSON).
+2. Define `"LlmProvider": "Ollama"` e ajusta `OllamaBaseUrl` / `OllamaModel`.
+3. Faz pull de um modelo com **visão** para sketch (ex.: `ollama pull llava` se usares `llava` no JSON).
+
+## NVIDIA NIM / AI Foundry (cloud, OpenAI-compatible)
+
+1. Obtém uma API key NVIDIA (formato `nvapi-...`) no [NVIDIA Build](https://build.nvidia.com/) ou na documentação do produto que estiveres a usar.
+2. Em `pluginsettings.json`:
+   - `"LlmProvider": "Nvidia"`
+   - `NvidiaApiKey` com o Bearer token
+   - `NvidiaModel` com o slug do modelo listado para **chat completions** (ver catálogo; para sketch precisas de suporte a imagem no mesmo endpoint).
+3. Opcional: `NvidiaChatCompletionsUrl` se o teu ambiente não usar o default `https://integrate.api.nvidia.com/v1/chat/completions`.
+
+Sem `NvidiaApiKey` válida com `LlmProvider: Nvidia`, o plugin reporta erro claro.
 
 ## Gemini (opcional)
 

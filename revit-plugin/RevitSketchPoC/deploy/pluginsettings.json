@@ -6,8 +6,8 @@
   "GeminiApiKey": "",
   "GeminiModel": "gemini-2.0-flash",
   "LlmProvider": "Nvidia",
-  "NvidiaApiKey": "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",
-  "NvidiaModel": "google/gemma-3n-e4b-it",
+  "NvidiaApiKey": "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",
+  "NvidiaModel": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   "NvidiaChatCompletionsUrl": "",
   "DefaultWallHeightMeters": 3.0
 }
