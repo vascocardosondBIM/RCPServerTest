@@ -28,131 +28,177 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
             var selectOps = new List<JObject>();
             var placementBatch = new List<(double x, double y, ElementId levelId)>();
             var wallBatchKeys = new HashSet<string>(StringComparer.Ordinal);
+            var openingBatchKeys = new HashSet<string>(StringComparer.Ordinal);
 
-            using (var tx = new Transaction(doc, "AI Chat — revitOps"))
+            Transaction? tx = new Transaction(doc, "AI Chat — revitOps");
+            try
             {
                 tx.Start();
-                try
+                for (var i = 0; i < n; i++)
                 {
-                    for (var i = 0; i < n; i++)
+                    if (ops[i] is not JObject opObj)
                     {
-                        if (ops[i] is not JObject opObj)
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        var op = opObj["op"]?.ToString()?.Trim()?.ToLowerInvariant();
-                        if (string.IsNullOrEmpty(op))
-                        {
-                            fail++;
-                            log.AppendLine("Op " + i + ": missing \"op\".");
-                            continue;
-                        }
+                    var op = opObj["op"]?.ToString()?.Trim()?.ToLowerInvariant();
+                    if (string.IsNullOrEmpty(op))
+                    {
+                        fail++;
+                        log.AppendLine("Op " + i + ": missing \"op\".");
+                        continue;
+                    }
 
-                        if (string.Equals(op, "select_elements", StringComparison.Ordinal))
-                        {
-                            selectOps.Add(opObj);
-                            continue;
-                        }
+                    if (string.Equals(op, "select_elements", StringComparison.Ordinal))
+                    {
+                        selectOps.Add(opObj);
+                        continue;
+                    }
 
+                    if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal))
+                    {
                         try
                         {
-                            switch (op)
+                            if (tx != null && tx.GetStatus() == TransactionStatus.Started)
                             {
-                                case "set_parameter":
-                                    RevitSetParameterOps.Run(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "delete_elements":
-                                    RevitDeleteElementsOps.Run(doc, opObj, log, MaxIdsPerOp);
-                                    ok++;
-                                    break;
-                                case "create_wall":
-                                    RevitWallCreationOps.RunCreateWallJsonOp(doc, opObj, settings, log, wallBatchKeys);
-                                    ok++;
-                                    break;
-                                case "create_wall_arc":
-                                    RevitWallCreationOps.RunCreateWallArcJsonOp(doc, opObj, settings, log, wallBatchKeys);
-                                    ok++;
-                                    break;
-                                case "create_room":
-                                    RevitRoomCreationOps.RunCreateRoomJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "create_door":
-                                    RevitDoorCreationOps.RunCreateDoorJsonOp(doc, opObj, log, placementBatch);
-                                    ok++;
-                                    break;
-                                case "create_window":
-                                    RevitWindowCreationOps.RunCreateWindowJsonOp(doc, opObj, log, placementBatch);
-                                    ok++;
-                                    break;
-                                case "create_floor":
-                                    RevitFloorCreationOps.RunCreateFloorJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "create_ceiling":
-                                    RevitCeilingCreationOps.RunCreateCeilingJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "create_wall_opening":
-                                    RevitWallOpeningOps.RunCreateWallOpeningJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "flip_wall":
-                                    RevitWallModifyOps.RunFlipWallJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "create_family_instance":
-                                    RevitFamilyInstanceCreationOps.RunCreateFamilyInstanceJsonOp(doc, opObj, log, placementBatch);
-                                    ok++;
-                                    break;
-                                case "create_level":
-                                    RevitLevelCreationOps.RunCreateLevelJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "create_grid":
-                                    RevitGridCreationOps.RunCreateGridJsonOp(doc, opObj, log);
-                                    ok++;
-                                    break;
-                                case "change_element_level":
-                                    RevitChangeLevelPreserveOps.Run(
-                                        doc,
-                                        opObj,
-                                        log,
-                                        MaxIdsPerOp,
-                                        RevitChangeLevelPreserveOps.ReadPreserveWorldPosition(opObj));
-                                    ok++;
-                                    break;
-                                case "change_level_preserve_position":
-                                    RevitChangeLevelPreserveOps.Run(doc, opObj, log, MaxIdsPerOp, preserveWorldPosition: true);
-                                    ok++;
-                                    break;
-                                default:
-                                    fail++;
-                                    log.AppendLine("Op " + i + ": unknown op \"" + op + "\".");
-                                    break;
+                                doc.Regenerate();
+                                tx.Commit();
                             }
+
+                            tx?.Dispose();
+                            tx = null;
+                            RevitWallArchProfileOps.RunCreateWallRomanArchProfileJsonOp(doc, opObj, log);
+                            ok++;
+
+                            tx = new Transaction(doc, "AI Chat — revitOps");
+                            tx.Start();
                         }
                         catch (Exception ex)
                         {
                             fail++;
                             log.AppendLine("Op " + i + " (" + op + "): " + ex.Message);
+                            if (tx == null)
+                            {
+                                tx = new Transaction(doc, "AI Chat — revitOps");
+                            }
+
+                            if (tx.GetStatus() != TransactionStatus.Started)
+                            {
+                                tx.Start();
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    try
+                    {
+                        switch (op)
+                        {
+                            case "set_parameter":
+                                RevitSetParameterOps.Run(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "delete_elements":
+                                RevitDeleteElementsOps.Run(doc, opObj, log, MaxIdsPerOp);
+                                ok++;
+                                break;
+                            case "create_wall":
+                                RevitWallCreationOps.RunCreateWallJsonOp(doc, opObj, settings, log, wallBatchKeys);
+                                ok++;
+                                break;
+                            case "create_wall_arc":
+                                RevitWallCreationOps.RunCreateWallArcJsonOp(doc, opObj, settings, log, wallBatchKeys);
+                                ok++;
+                                break;
+                            case "create_room":
+                                RevitRoomCreationOps.RunCreateRoomJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "create_door":
+                                RevitDoorCreationOps.RunCreateDoorJsonOp(doc, opObj, log, placementBatch);
+                                ok++;
+                                break;
+                            case "create_window":
+                                RevitWindowCreationOps.RunCreateWindowJsonOp(doc, opObj, log, placementBatch);
+                                ok++;
+                                break;
+                            case "create_floor":
+                                RevitFloorCreationOps.RunCreateFloorJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "create_ceiling":
+                                RevitCeilingCreationOps.RunCreateCeilingJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "create_wall_opening":
+                                RevitWallOpeningOps.RunCreateWallOpeningJsonOp(doc, opObj, log, openingBatchKeys);
+                                ok++;
+                                break;
+                            case "create_wall_arch_opening":
+                                RevitWallOpeningOps.RunCreateWallArchOpeningJsonOp(doc, opObj, log, openingBatchKeys);
+                                ok++;
+                                break;
+                            case "flip_wall":
+                                RevitWallModifyOps.RunFlipWallJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "create_family_instance":
+                                RevitFamilyInstanceCreationOps.RunCreateFamilyInstanceJsonOp(doc, opObj, log, placementBatch);
+                                ok++;
+                                break;
+                            case "create_level":
+                                RevitLevelCreationOps.RunCreateLevelJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "create_grid":
+                                RevitGridCreationOps.RunCreateGridJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "change_element_level":
+                                RevitChangeLevelPreserveOps.Run(
+                                    doc,
+                                    opObj,
+                                    log,
+                                    MaxIdsPerOp,
+                                    RevitChangeLevelPreserveOps.ReadPreserveWorldPosition(opObj));
+                                ok++;
+                                break;
+                            case "change_level_preserve_position":
+                                RevitChangeLevelPreserveOps.Run(doc, opObj, log, MaxIdsPerOp, preserveWorldPosition: true);
+                                ok++;
+                                break;
+                            default:
+                                fail++;
+                                log.AppendLine("Op " + i + ": unknown op \"" + op + "\".");
+                                break;
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        fail++;
+                        log.AppendLine("Op " + i + " (" + op + "): " + ex.Message);
+                    }
+                }
 
-                    doc.Regenerate();
+                doc.Regenerate();
+                if (tx != null && tx.GetStatus() == TransactionStatus.Started)
+                {
                     tx.Commit();
                 }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                if (tx != null && tx.HasStarted() && tx.GetStatus() == TransactionStatus.Started)
                 {
-                    if (tx.HasStarted() && tx.GetStatus() == TransactionStatus.Started)
-                    {
-                        tx.RollBack();
-                    }
-
-                    return "Transação revertida: " + ex.Message;
+                    tx.RollBack();
                 }
+
+                return "Transação revertida: " + ex.Message;
+            }
+            finally
+            {
+                tx?.Dispose();
             }
 
             foreach (var opObj in selectOps)
