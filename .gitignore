@@ -6,6 +6,7 @@ yarn-error.log*
 # .NET — plugin Revit (artefatos de build)
 revit-plugin/**/bin/
 revit-plugin/**/obj/
+revit-plugin/RevitSketchPoC/artifacts/
 *.user
 *.suo
 *.userosscache
@@ -26,3 +27,7 @@ Thumbs.db
 
 # Nota: a pasta `build/` do servidor MCP pode estar versionada para `npx`/publicação npm.
 # Não ignores `build/` se o teu fluxo de release depender dela no Git.
+
+# Spike 1 local outputs / fixtures
+spike1/output_*/
+modelos/

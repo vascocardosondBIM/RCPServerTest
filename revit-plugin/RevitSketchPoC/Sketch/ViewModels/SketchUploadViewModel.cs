@@ -11,7 +11,7 @@ namespace RevitSketchPoC.Sketch.ViewModels
 {
     public sealed class SketchUploadViewModel : INotifyPropertyChanged
     {
-        private string? _imagePath;
+        private string? _inputPath;
         private string? _status;
         private string _prompt = "Create walls, rooms and doors from this sketch.";
         private bool _autoCreateRooms = true;
@@ -30,12 +30,12 @@ namespace RevitSketchPoC.Sketch.ViewModels
             _runCommand = new RelayCommand(_ => RaiseRunRequested(), _ => CanRun());
         }
 
-        public string? ImagePath
+        public string? InputPath
         {
-            get => _imagePath;
+            get => _inputPath;
             set
             {
-                _imagePath = value;
+                _inputPath = value;
                 OnPropertyChanged();
                 _runCommand.RaiseCanExecuteChanged();
             }
@@ -150,14 +150,14 @@ namespace RevitSketchPoC.Sketch.ViewModels
 
             if (dialog.ShowDialog() == true)
             {
-                ImagePath = dialog.FileName;
+                InputPath = dialog.FileName;
                 Status = null;
             }
         }
 
         private bool CanRun()
         {
-            return !IsBusy && !string.IsNullOrWhiteSpace(ImagePath) && File.Exists(ImagePath);
+            return !IsBusy && !string.IsNullOrWhiteSpace(InputPath) && File.Exists(InputPath);
         }
 
         private void RaiseRunRequested()
@@ -170,7 +170,7 @@ namespace RevitSketchPoC.Sketch.ViewModels
 
             RunRequested?.Invoke(this, new SketchToBimRequest
             {
-                ImagePath = ImagePath,
+                ImagePath = InputPath,
                 Prompt = Prompt,
                 AutoCreateRooms = AutoCreateRooms,
                 AutoCreateDoors = AutoCreateDoors,

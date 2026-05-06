@@ -40,6 +40,15 @@ namespace RevitSketchPoC.Sketch.Contracts
 
         [JsonProperty("showPreviewUi")]
         public bool ShowPreviewUi { get; set; } = true;
+
+        [JsonProperty("pdfPageNumber")]
+        public int PdfPageNumber { get; set; } = 1;
+    }
+
+    public sealed class PdfVectorJsonRequest
+    {
+        public string PdfPath { get; set; } = string.Empty;
+        public int PdfPageNumber { get; set; } = 1;
     }
 
     public sealed class SketchInterpretation

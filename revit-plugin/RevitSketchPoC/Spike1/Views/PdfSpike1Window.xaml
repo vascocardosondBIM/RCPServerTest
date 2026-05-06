@@ -32,25 +32,6 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
-                                SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="PrimaryButton" TargetType="Button">
@@ -113,106 +94,104 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="140" />
+                    <RowDefinition Height="*" MinHeight="240" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="Sketch to BIM"
+                    <TextBlock Text="Spike 1 - PDF Vetorial para JSON"
                                FontSize="22"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource Brush.Text}" />
-                    <TextBlock Text="Carrega um desenho, opcionalmente ajusta o prompt e gera paredes/quartos no modelo."
+                    <TextBlock Text="Extrai geometria vetorial bruta (linhas, curvas, retângulos e texto) sem interpretação por IA."
                                FontSize="13"
                                Foreground="{StaticResource Brush.TextMuted}"
                                TextWrapping="Wrap"
                                Margin="0,6,0,0" />
                 </StackPanel>
 
-                <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Imagem" />
-                <Grid Grid.Row="2" Margin="0,0,0,16">
+                <Grid Grid.Row="1" Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="90" />
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0"
                              Height="40"
-                             VerticalContentAlignment="Center"
                              IsReadOnly="True"
-                             Text="{Binding InputPath, UpdateSourceTrigger=PropertyChanged}" />
+                             Text="{Binding PdfPath, UpdateSourceTrigger=PropertyChanged}" />
                     <Button Grid.Column="1"
                             Style="{StaticResource SecondaryButton}"
-                            Margin="10,0,0,0"
-                            VerticalAlignment="Stretch"
-                            Command="{Binding BrowseCommand}">
+                            Margin="10,0,10,0"
+                            Command="{Binding BrowsePdfCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🖼" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Procurar…" VerticalAlignment="Center" />
+                            <TextBlock Text="📄" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Procurar PDF…" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                    <TextBox Grid.Column="2"
+                             Height="40"
+                             Text="{Binding PdfPageNumber, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
 
-                <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Prompt (opcional)" />
-                <TextBox Grid.Row="4"
-                         Height="88"
-                         AcceptsReturn="True"
+                <TextBox Grid.Row="2"
+                         MinHeight="70"
+                         IsReadOnly="True"
                          TextWrapping="Wrap"
+                         AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
-                         Margin="0,0,0,16"
-                         Text="{Binding Prompt, UpdateSourceTrigger=PropertyChanged}" />
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         Foreground="{StaticResource Brush.Status}"
+                         Background="#FFFFFBFE"
+                         BorderBrush="#FFFECACA"
+                         Text="{Binding Status}" />
 
-                <StackPanel Grid.Row="5" Orientation="Vertical">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <CheckBox Content="Criar quartos"
-                                  Margin="0,0,20,0"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding AutoCreateRooms}" />
-                        <CheckBox Content="Criar portas"
-                                  Margin="0,0,20,0"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding AutoCreateDoors}" />
-                        <CheckBox Content="Criar janelas"
-                                  Margin="0,0,20,0"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding AutoCreateWindows}" />
-                        <CheckBox Content="Criar pisos"
-                                  Margin="0,0,20,0"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding AutoCreateFloors}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <CheckBox Content="Pré-visualizar antes de aplicar"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding ShowInterpretationPreview}" />
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource FieldLabel}" Text="Estado" Margin="0,0,0,6" />
-                    <TextBox MinHeight="160"
-                             IsReadOnly="True"
-                             TextWrapping="Wrap"
-                             AcceptsReturn="True"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto"
-                             FontFamily="Consolas"
-                             FontSize="12"
-                             Foreground="{StaticResource Brush.Status}"
-                             Background="#FFFFFBFE"
-                             BorderBrush="#FFFECACA"
-                             Text="{Binding Status}" />
+                <TextBox Grid.Row="3"
+                         Margin="0,12,0,0"
+                         MinHeight="220"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas"
+                         FontSize="11"
+                         Foreground="{StaticResource Brush.Text}"
+                         Background="#FFF8FAFC"
+                         Text="{Binding GeneratedJsonPreview}" />
+
+                <StackPanel Grid.Row="4"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,18,0,0">
+                    <Button Style="{StaticResource PrimaryButton}"
+                            MinWidth="180"
+                            Margin="0,0,10,0"
+                            Command="{Binding GenerateJsonCommand}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🧩" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Gerar JSON PDF" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource SecondaryButton}"
+                            MinWidth="200"
+                            Margin="0,0,10,0"
+                            Command="{Binding OpenFolderCommand}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📂" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Abrir pasta dos JSONs" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource SecondaryButton}"
+                            MinWidth="150"
+                            Command="{Binding SaveJsonCommand}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="💾" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Guardar JSON…" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-
-                <Button Grid.Row="6"
-                        Style="{StaticResource PrimaryButton}"
-                        HorizontalAlignment="Right"
-                        Margin="0,18,0,0"
-                        MinWidth="190"
-                        Command="{Binding RunCommand}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="🏗" FontSize="18" Margin="0,0,6,0" />
-                        <TextBlock Text="Gerar modelo" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
             </Grid>
         </Border>
     </Grid>

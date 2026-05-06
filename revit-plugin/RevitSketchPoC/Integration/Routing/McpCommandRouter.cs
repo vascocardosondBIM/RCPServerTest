@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using RevitSketchPoC.Sketch.Contracts;
 using RevitSketchPoC.Sketch.Services;
@@ -27,7 +27,8 @@ namespace RevitSketchPoC.Integration.Routing
                     ? new SketchToBimRequest()
                     : JsonConvert.DeserializeObject<SketchToBimRequest>(paramsJson) ?? new SketchToBimRequest();
 
-                return _sketchHandler.HandleSync(uiApp.ActiveUIDocument, request);
+                var normalizedRequest = SketchInputPreprocessor.NormalizeForLlm(request);
+                return _sketchHandler.HandleSync(uiApp.ActiveUIDocument, normalizedRequest);
             }
 
             throw new InvalidOperationException("Unknown method: " + method);

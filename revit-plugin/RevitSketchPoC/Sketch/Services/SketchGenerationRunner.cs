@@ -33,14 +33,18 @@ namespace RevitSketchPoC.Sketch.Services
             {
                 try
                 {
-                    var interpretation = pipeline.InterpretOnlyAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+                    var normalizedRequest = SketchInputPreprocessor.NormalizeForLlm(
+                        request,
+                        line => Ui(window, w => w.ViewModel.AppendStatus(line)));
+
+                    var interpretation = pipeline.InterpretOnlyAsync(normalizedRequest).ConfigureAwait(false).GetAwaiter().GetResult();
                     Ui(window, w => w.ViewModel.AppendStatus("Resposta do modelo recebida."));
 
-                    if (request.ShowPreviewUi)
+                    if (normalizedRequest.ShowPreviewUi)
                     {
                         var accepted = false;
                         window.Dispatcher.Invoke(
-                            new Action(() => { accepted = SketchInterpretationPreviewWindow.ConfirmWithUser(window, request, interpretation); }));
+                            new Action(() => { accepted = SketchInterpretationPreviewWindow.ConfirmWithUser(window, normalizedRequest, interpretation); }));
                         if (!accepted)
                         {
                             Ui(window, w =>

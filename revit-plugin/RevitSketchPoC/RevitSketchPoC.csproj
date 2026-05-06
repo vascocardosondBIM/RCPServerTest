@@ -32,11 +32,15 @@
   <ItemGroup>
     <Page Remove="Sketch\Views\SketchUploadWindow.xaml" />
     <Page Remove="Chat\Views\LlmChatWindow.xaml" />
+    <Page Remove="Spike1\Views\PdfSpike1Window.xaml" />
     <EmbeddedResource Include="Sketch\Views\SketchUploadWindow.xaml">
       <LogicalName>RevitSketchPoC.Sketch.Views.SketchUploadWindow.xaml</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Chat\Views\LlmChatWindow.xaml">
       <LogicalName>RevitSketchPoC.Chat.Views.LlmChatWindow.xaml</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Spike1\Views\PdfSpike1Window.xaml">
+      <LogicalName>RevitSketchPoC.Spike1.Views.PdfSpike1Window.xaml</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 </Project>

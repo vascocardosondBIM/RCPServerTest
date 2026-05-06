@@ -80,6 +80,22 @@ Output esperado: `bin\Release\RevitSketchPoC.dll`
 4. Opcional: ativa **«Pré-visualizar antes de aplicar»** para comparar a imagem com o que o modelo interpretou antes de criar geometria.
 5. **Gerar modelo** — cria paredes, quartos (rooms) e portas conforme opções.
 
+## Spike 1 (UI dedicada)
+
+1. Tab **Sketch AI PoC** → **Spike 1 PDF->JSON**.
+2. Seleciona o PDF vetorial.
+3. Define a página (`1` = primeira).
+4. Clica **Gerar JSON PDF** para extrair geometrias/texto sem IA.
+5. Clica **Guardar JSON…** para exportar o ficheiro gerado.
+
+> [!TIP]
+> Se enviares PDF no upload da UI/MCP, o plugin converte automaticamente a 1ª página para PNG antes de chamar o LLM.
+> Esta conversão usa Python + PyMuPDF na máquina local:
+>
+> ```bash
+> python -m pip install pymupdf
+> ```
+
 **Assistente IA** — conversa com contexto do documento; em vista de planta o contexto pode incluir `planGeometryInActiveView` (coordenadas aproximadas de paredes/portas/salas).
 
 ---
