@@ -6,6 +6,7 @@ using RevitSketchPoC.RevitOperations.DeleteElements;
 using RevitSketchPoC.RevitOperations.SelectElements;
 using RevitSketchPoC.RevitOperations.CreateElements;
 using RevitSketchPoC.RevitOperations.ChangeElements;
+using RevitSketchPoC.RevitOperations.ReviewElements;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -125,6 +126,14 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                 break;
                             case "create_floor":
                                 RevitFloorCreationOps.RunCreateFloorJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "analyze_floor_wall_footprint":
+                                RevitFloorWallFootprintOps.RunAnalyzeFloorWallFootprintJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "repair_floor_to_wall_footprint":
+                                RevitFloorWallFootprintOps.RunRepairFloorToWallFootprintJsonOp(doc, opObj, log);
                                 ok++;
                                 break;
                             case "create_ceiling":
