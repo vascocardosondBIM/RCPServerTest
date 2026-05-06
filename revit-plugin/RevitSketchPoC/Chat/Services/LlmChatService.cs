@@ -60,6 +60,16 @@ namespace RevitSketchPoC.Chat.Services
             "- create_wall_opening: rectangular opening on wall. Host by hostWallId OR locationX/locationY (+ optional levelName). Position by positionAlongWallMeters or positionRatio (0..1) or location projection. Required: openingWidthMeters and openingHeightMeters (or openingTopOffsetMeters with openingBaseOffsetMeters). Optional: maxHostDistanceMeters, autoClamp (true/false).\n" +
             "- create_wall_arch_opening: ONLY when the user explicitly wants a door element (schedules, door type from context, tags as a door) with an arched shape — it hosts a door family on the wall. If they only want a plain arched hole in the wall (no door in door schedules), use create_wall_roman_arch_profile instead. Same host/position fields as create_wall_opening. Optional archTypeName (or doorTypeName), openingWidthMeters, openingHeightMeters, openingBaseOffsetMeters, autoClamp. Choose an ARCHED door type (name should indicate arch/arco/roman/round); avoid plain rectangular door types.\n" +
             "- create_wall_roman_arch_profile: TRUE roman arch void by editing wall profile (no arched door family). hostWallId (straight wall), positionAlongWallMeters or positionRatio, openingWidthMeters, openingBaseOffsetMeters, jambHeightMeters OR openingTotalHeightMeters (total = jamb + width/2), optional autoClamp. Keep openingBaseOffsetMeters at least ~0.05 m or omit — the plugin auto-lifts the void so its boundary never coincides with the wall outer profile (Revit crashes on shared edges). Replaces sketch on that wall; commits prior ops in the batch before this step.\n" +
+            "- create_wall_custom_profile_void: CLOSED HOLE through wall thickness (inner profile loop). hostWallId (straight wall). " +
+            "One void: root \"shape\" { kind, ... } or \"boundary\" [ { alongMeters, heightFromWallBaseMeters }, ... ] (>=3). " +
+            "Several voids: \"voids\": [ { \"shape\": { kind, ... }, \"centerAlongMeters\": ..., \"centerHeightFromWallBaseMeters\": ... } ] — center/rotation may be siblings of \"shape\" in the same object (merged automatically), or inside \"shape\". " +
+            "Parametric kinds need centerAlongMeters, centerHeightFromWallBaseMeters, optional rotationDegrees. " +
+            "Supported kinds: star (outerRadiusMeters, points/tips, optional innerRadiusMeters); regularPolygon (radiusMeters, sides); " +
+            "isoscelesTriangle/triangle (baseWidthMeters, heightMeters, optional pointUp); diamond/rhombus (widthAlongMeters, heightMeters); " +
+            "cross/plus (horizontalSpanMeters, verticalSpanMeters, armThicknessMeters); heart (scaleMeters, segments). " +
+            "For circles, ellipses, slots, rounded rectangles, capsules, squircles, or any other silhouette use \"boundary\" with explicit points. " +
+            "For roman arch wall openings use create_wall_roman_arch_profile (not this op). " +
+            "clampToWallShell default true. Replaces wall profile sketch; commits prior batch ops like create_wall_roman_arch_profile.\n" +
             "- flip_wall: elementIds (array) or elementId — flips wall facing.\n" +
             "- create_family_instance: familyTypeName (required — type name or \"Family : Type\" from context namedTypesForRevitOps.sampleLoadableFamilyTypes); locationX/locationY or location {x,y}; optional levelName; optional rotationDegrees (plan rotation).\n" +
             "- create_level: name (string), elevationMeters (number — metres from internal origin, same convention as sketch XY origin height reference).\n" +
@@ -67,7 +77,7 @@ namespace RevitSketchPoC.Chat.Services
             "- change_element_level: default when the user wants to move elements to another level without keeping world position. Same ids/level fields as below; optional preserveWorldPosition (boolean, default false) or preservePosition — set true only when the user explicitly asks to keep the same XYZ in the model.\n" +
             "- change_level_preserve_position: same fields as change_element_level but always preserves world Z (equivalent to preserveWorldPosition true). Use when the user clearly wants height/position unchanged in space.\n" +
             "  Common fields for both: elementIds (array) and/or elementId; targetLevelName or targetLevelId. Supported: FamilyInstance (level-hosted), Wall, Floor, Ceiling.\n" +
-            "All revitOps in the JSON array are applied in one Revit transaction; very large batches can be slow or fail mid-run — prefer reasonable sizes or the Sketch-to-BIM flow for full floor plans.\n" +
+            "All revitOps in the JSON array are applied in one Revit transaction except create_wall_roman_arch_profile and create_wall_custom_profile_void (they commit earlier ops first). Very large batches can be slow or fail mid-run — prefer reasonable sizes or the Sketch-to-BIM flow for full floor plans.\n" +
             "Use only element ids from the Revit context when possible. Prefer few, safe operations; the user can run the chat again.";
 
         private readonly PluginSettings _settings;

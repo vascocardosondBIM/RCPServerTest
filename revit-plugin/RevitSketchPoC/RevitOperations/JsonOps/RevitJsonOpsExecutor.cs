@@ -56,7 +56,8 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                         continue;
                     }
 
-                    if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal))
+                    if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal) ||
+                        string.Equals(op, "create_wall_custom_profile_void", StringComparison.Ordinal))
                     {
                         try
                         {
@@ -68,7 +69,15 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
 
                             tx?.Dispose();
                             tx = null;
-                            RevitWallArchProfileOps.RunCreateWallRomanArchProfileJsonOp(doc, opObj, log);
+                            if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal))
+                            {
+                                RevitWallArchProfileOps.RunCreateWallRomanArchProfileJsonOp(doc, opObj, log);
+                            }
+                            else
+                            {
+                                RevitWallCustomProfileVoidOps.RunCreateWallCustomProfileVoidJsonOp(doc, opObj, log);
+                            }
+
                             ok++;
 
                             tx = new Transaction(doc, "AI Chat — revitOps");

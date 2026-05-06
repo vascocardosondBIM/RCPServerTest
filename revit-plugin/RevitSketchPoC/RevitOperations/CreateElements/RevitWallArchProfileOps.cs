@@ -149,56 +149,70 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             var innerCurves = BuildInnerRomanCurves(WallPoint, alongFt, halfW, openBaseZ, springZ, riseFt);
 
             ElementId sketchId;
-            using (var txSketch = new Transaction(doc, "Roman arch — wall profile sketch"))
+            using (var tg = new TransactionGroup(doc, "Roman arch — wall profile"))
             {
-                txSketch.Start();
-                if (wall.SketchId != ElementId.InvalidElementId)
+                tg.Start();
+                try
                 {
-                    wall.RemoveProfileSketch();
-                    doc.Regenerate();
-                }
-
-                var sketch = wall.CreateProfileSketch();
-                doc.Regenerate();
-                sketchId = sketch.Id;
-                txSketch.Commit();
-            }
-
-            using (var ses = new SketchEditScope(doc, "Roman arch — edit wall profile"))
-            {
-                ses.Start(sketchId);
-                using (var txCurves = new Transaction(doc, "Roman arch — profile curves"))
-                {
-                    txCurves.Start();
-                    var sketchEl = doc.GetElement(sketchId) as global::Autodesk.Revit.DB.Sketch
-                                   ?? throw new InvalidOperationException(
-                                       "create_wall_roman_arch_profile: sketch not found after create.");
-                    var plane = sketchEl.SketchPlane
-                                ?? throw new InvalidOperationException(
-                                    "create_wall_roman_arch_profile: sketch has no SketchPlane.");
-
-                    foreach (var depId in sketchEl.GetAllElements())
+                    using (var txSketch = new Transaction(doc, "Roman arch — wall profile sketch"))
                     {
-                        if (doc.GetElement(depId) is ModelCurve)
+                        txSketch.Start();
+                        if (wall.SketchId != ElementId.InvalidElementId)
                         {
-                            doc.Delete(depId);
+                            wall.RemoveProfileSketch();
+                            doc.Regenerate();
                         }
+
+                        var sketch = wall.CreateProfileSketch();
+                        doc.Regenerate();
+                        sketchId = sketch.Id;
+                        txSketch.Commit();
                     }
 
-                    foreach (var c in outerCurves)
+                    using (var ses = new SketchEditScope(doc, "Roman arch — edit wall profile"))
                     {
-                        doc.Create.NewModelCurve(c, plane);
+                        ses.Start(sketchId);
+                        using (var txCurves = new Transaction(doc, "Roman arch — profile curves"))
+                        {
+                            txCurves.Start();
+                            var sketchEl = doc.GetElement(sketchId) as global::Autodesk.Revit.DB.Sketch
+                                           ?? throw new InvalidOperationException(
+                                               "create_wall_roman_arch_profile: sketch not found after create.");
+                            var plane = sketchEl.SketchPlane
+                                        ?? throw new InvalidOperationException(
+                                            "create_wall_roman_arch_profile: sketch has no SketchPlane.");
+
+                            foreach (var depId in sketchEl.GetAllElements())
+                            {
+                                if (doc.GetElement(depId) is ModelCurve)
+                                {
+                                    doc.Delete(depId);
+                                }
+                            }
+
+                            foreach (var c in outerCurves)
+                            {
+                                doc.Create.NewModelCurve(c, plane);
+                            }
+
+                            foreach (var c in innerCurves)
+                            {
+                                doc.Create.NewModelCurve(c, plane);
+                            }
+
+                            txCurves.Commit();
+                        }
+
+                        ses.Commit(new ContinueFailuresPreprocessor());
                     }
 
-                    foreach (var c in innerCurves)
-                    {
-                        doc.Create.NewModelCurve(c, plane);
-                    }
-
-                    txCurves.Commit();
+                    tg.Assimilate();
                 }
-
-                ses.Commit(new ContinueFailuresPreprocessor());
+                catch
+                {
+                    tg.RollBack();
+                    throw;
+                }
             }
 
             doc.Regenerate();
