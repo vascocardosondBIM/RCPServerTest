@@ -119,6 +119,9 @@ Resumo no status do plugin:
 
 - `tiles`, `detections`, `snapped`, `unmatched`.
 
+> [!NOTE]
+> A documentação detalhada da base entregue para continuidade do Spike 2 (arquivos-chave, contrato e artefatos) está em `Spike1/README.md`, seção **Base pronta para o colega (Spike 2)**.
+
 > [!TIP]
 > Se enviares PDF no upload da UI/MCP, o plugin converte automaticamente a 1ª página para PNG antes de chamar o LLM.
 > Esta conversão usa Python + PyMuPDF na máquina local:

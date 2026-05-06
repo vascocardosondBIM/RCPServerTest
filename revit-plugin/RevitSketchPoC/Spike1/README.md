@@ -404,3 +404,55 @@ Como o `semantic_ready_manifest.json` e os tiles já estão implementados, os pr
 - painel de comparação entre execuções (baseline vs. nova execução)
 
 Assim, o Spike 2 pode consumir o contexto por blocos menores, com custo e latência controlados.
+
+---
+
+## Base pronta(Spike 2)
+
+Esta base já foi deixada pronta para continuidade do Spike 2 no repositório.
+
+### O que já está implementado e utilizável
+
+- inferência semântica por tile (LLM provider via `pluginsettings.json`);
+- validação de contrato (`semantic_pixels.v1`);
+- matching geométrico (snap bbox -> `clean.json`);
+- calibração explícita para metros (`AutoScale`, `ManualScale`, `ReferencePoints`);
+- métricas automáticas de qualidade/observabilidade.
+
+### Arquivos-chave para continuidade
+
+- `Sketch/Services/SemanticTileInferenceService.cs`
+- `Sketch/Services/SemanticPixelsValidator.cs`
+- `Sketch/Services/SemanticGeometryMatcher.cs`
+- `Sketch/Services/SemanticCalibrationService.cs`
+- `Sketch/Services/SemanticQualityMetricsService.cs`
+- `Spike1/Commands/PdfSpike1ExternalCommand.cs`
+- `Spike1/ViewModels/PdfSpike1ViewModel.cs`
+- `Spike1/Views/PdfSpike1Window.xaml`
+- `Sketch/Contracts/SketchContracts.cs`
+
+### Artefatos do pipeline (saídas)
+
+- `*_clean.json`
+- `*_semantic_ready_manifest.json`
+- `*_semantic_pixels.json`
+- `*_semantic_real_world.json`
+- `*_semantic_metrics.json`
+- `*_tiles/*.png`
+
+### Contrato semântico de referência
+
+Campos por deteção em `semantic_pixels.json`:
+
+- `type`
+- `confidence`
+- `bbox` (pixels do tile)
+- `page`
+- `tile_id`
+
+### Próximos focos recomendados 
+
+- tuning de prompts/modelos por tipologia de planta;
+- paralelismo/batching de tiles para reduzir tempo de execução;
+- métricas detalhadas por tile e comparação entre execuções;
+- hardening para casos extremos (escala/texto pouco legível, ruído elevado).
