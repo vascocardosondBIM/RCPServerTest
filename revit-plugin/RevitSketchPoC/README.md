@@ -85,8 +85,39 @@ Output esperado: `bin\Release\RevitSketchPoC.dll`
 1. Tab **Sketch AI PoC** → **Spike 1 PDF->JSON**.
 2. Seleciona o PDF vetorial.
 3. Define a página (`1` = primeira).
-4. Clica **Gerar JSON PDF** para extrair geometrias/texto sem IA.
-5. Clica **Guardar JSON…** para exportar o ficheiro gerado.
+4. (Opcional) escolhe preset de qualidade (`Rápido`, `Balanceado`, `Alta precisão`) ou ajusta `tile_size_pt` / `raster_dpi`.
+5. Clica **Gerar JSON PDF** para extrair geometrias/texto sem IA.
+6. Artefactos gerados: `raw`, `clean`, `semantic_ready_manifest`, `semantic_pixels` e `tiles`.
+7. (Opcional) Clica **Executar Spike 2 (LLM)** para inferência semântica por tile usando o provider configurado.
+8. O contrato `semantic_pixels.v1` é validado automaticamente e o matching geométrico (snap bbox -> clean) é aplicado.
+9. A calibração explícita converte para coordenada real e gera `*_semantic_real_world.json`.
+10. Clica **Guardar JSON…** para exportar o ficheiro gerado.
+
+### Spike 2 (semântico por tile, integrado na mesma janela)
+
+- Botão: **Executar Spike 2 (LLM)**.
+- Provider usado: definido em `pluginsettings.json` (`LlmProvider`).
+- Processamento:
+  1. inferência de cada tile no modelo vision;
+  2. validação de schema (`semantic_pixels.v1`);
+  3. matching geométrico com snap para `clean.json`;
+  4. calibração explícita para metros (`AutoScale`, `ManualScale`, `ReferencePoints`).
+
+Notas de calibração:
+
+- `AutoScale` tenta ler `1:N` no texto da planta;
+- `ManualScale` usa a escala informada no UI;
+- `ReferencePoints` usa dois pontos conhecidos e distância real em metros.
+
+Artefato final atualizado:
+
+- `*_semantic_pixels.json` (deteções + metadados de matching).
+- `*_semantic_real_world.json` (deteções em coordenada real consistente).
+- `*_semantic_metrics.json` (precision/unmatched/calibration error + contagens).
+
+Resumo no status do plugin:
+
+- `tiles`, `detections`, `snapped`, `unmatched`.
 
 > [!TIP]
 > Se enviares PDF no upload da UI/MCP, o plugin converte automaticamente a 1ª página para PNG antes de chamar o LLM.
