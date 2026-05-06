@@ -11,50 +11,65 @@ using System.Text;
 
 namespace RevitSketchPoC.RevitOperations.CreateElements
 {
-    /// <summary>Doors on walls from placement points or JSON <c>create_door</c>.</summary>
-    public static class RevitDoorCreationOps
+    /// <summary>Windows on walls from placement points or JSON <c>create_window</c>.</summary>
+    public static class RevitWindowCreationOps
     {
-        /// <summary>Creates doors hosted on the given walls (nearest wall to each placement point).</summary>
-        public static int CreateDoorsFromPlacements(
+        public static int CreateWindowsFromPlacements(
             Document doc,
             Level level,
             IReadOnlyCollection<Wall> walls,
-            IEnumerable<DoorPlacement> doors)
+            IEnumerable<WindowPlacement> windows)
         {
-            if (walls.Count == 0) return 0;
+            if (walls.Count == 0)
+            {
+                return 0;
+            }
 
             var created = 0;
-            foreach (var door in doors)
+            foreach (var win in windows)
             {
-                var doorSymbol = RevitFamilySymbolByName.ResolveInCategory(
+                var symbol = RevitFamilySymbolByName.ResolveInCategory(
                     doc,
-                    BuiltInCategory.OST_Doors,
-                    door.DoorTypeName);
-                if (doorSymbol == null) continue;
-
-                if (!doorSymbol.IsActive)
+                    BuiltInCategory.OST_Windows,
+                    win.WindowTypeName);
+                if (symbol == null)
                 {
-                    doorSymbol.Activate();
+                    continue;
+                }
+
+                if (!symbol.IsActive)
+                {
+                    symbol.Activate();
                     doc.Regenerate();
                 }
 
                 var point = new XYZ(
-                    RevitWallCreationOps.MetersToFeet(door.Location.X),
-                    RevitWallCreationOps.MetersToFeet(door.Location.Y),
+                    RevitWallCreationOps.MetersToFeet(win.Location.X),
+                    RevitWallCreationOps.MetersToFeet(win.Location.Y),
                     level.Elevation);
-                var host = FindNearestWall(walls, point);
-                if (host == null) continue;
+                var host = RevitDoorCreationOps.FindNearestWall(walls, point);
+                if (host == null)
+                {
+                    continue;
+                }
 
                 var locationCurve = host.Location as LocationCurve;
-                if (locationCurve == null) continue;
+                if (locationCurve == null)
+                {
+                    continue;
+                }
+
                 var projected = locationCurve.Curve.Project(point);
-                if (projected == null) continue;
+                if (projected == null)
+                {
+                    continue;
+                }
 
                 try
                 {
                     doc.Create.NewFamilyInstance(
                         projected.XYZPoint,
-                        doorSymbol,
+                        symbol,
                         host,
                         level,
                         StructuralType.NonStructural);
@@ -62,15 +77,14 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 }
                 catch
                 {
-                    // Keep going even if one placement fails.
+                    // Continue on placement failure.
                 }
             }
 
             return created;
         }
 
-        /// <summary>JSON op <c>create_door</c>: location in metres; optional hostWallId, else nearest wall on level.</summary>
-        public static void RunCreateDoorJsonOp(
+        public static void RunCreateWindowJsonOp(
             Document doc,
             JObject op,
             StringBuilder log,
@@ -79,7 +93,7 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             if (!TryReadLocationMeters(op, out var lx, out var ly))
             {
                 throw new InvalidOperationException(
-                    "create_door requires locationX/locationY (metres) or location object { x, y }.");
+                    "create_window requires locationX/locationY (metres) or location object { x, y }.");
             }
 
             var levelName = op["levelName"]?.ToString();
@@ -104,41 +118,41 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
 
             if (host == null)
             {
-                var wallsOnLevel = CollectWallsOnLevel(doc, level);
-                host = FindNearestWall(wallsOnLevel, point);
+                var wallsOnLevel = RevitDoorCreationOps.CollectWallsOnLevel(doc, level);
+                host = RevitDoorCreationOps.FindNearestWall(wallsOnLevel, point);
             }
 
             if (host == null)
             {
-                throw new InvalidOperationException("create_door: no suitable host wall found.");
+                throw new InvalidOperationException("create_window: no suitable host wall found.");
             }
 
-            var typeName = op["doorTypeName"]?.ToString();
-            var doorSymbol = RevitFamilySymbolByName.ResolveInCategory(
+            var typeName = op["windowTypeName"]?.ToString();
+            var windowSymbol = RevitFamilySymbolByName.ResolveInCategory(
                 doc,
-                BuiltInCategory.OST_Doors,
+                BuiltInCategory.OST_Windows,
                 string.IsNullOrWhiteSpace(typeName) ? null : typeName);
-            if (doorSymbol == null)
+            if (windowSymbol == null)
             {
-                throw new InvalidOperationException("create_door: no door family type in the project (or doorTypeName not found).");
+                throw new InvalidOperationException("create_window: no window family type in the project (or name not found).");
             }
 
-            if (!doorSymbol.IsActive)
+            if (!windowSymbol.IsActive)
             {
-                doorSymbol.Activate();
+                windowSymbol.Activate();
                 doc.Regenerate();
             }
 
             var locationCurve = host.Location as LocationCurve;
             if (locationCurve == null)
             {
-                throw new InvalidOperationException("create_door: host wall has no location curve.");
+                throw new InvalidOperationException("create_window: host wall has no location curve.");
             }
 
             var projected = locationCurve.Curve.Project(point);
             if (projected == null)
             {
-                throw new InvalidOperationException("create_door: could not project point onto host wall.");
+                throw new InvalidOperationException("create_window: could not project point onto host wall.");
             }
 
             FamilyInstance instance;
@@ -146,46 +160,17 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             {
                 instance = doc.Create.NewFamilyInstance(
                     projected.XYZPoint,
-                    doorSymbol,
+                    windowSymbol,
                     host,
                     level,
                     StructuralType.NonStructural);
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("create_door: " + ex.Message);
+                throw new InvalidOperationException("create_window: " + ex.Message);
             }
 
-            log.AppendLine("create_door id=" + instance.Id + " hostWallId=" + host.Id);
-        }
-
-        public static List<Wall> CollectWallsOnLevel(Document doc, Level level)
-        {
-            return new FilteredElementCollector(doc)
-                .OfClass(typeof(Wall))
-                .Cast<Wall>()
-                .Where(w => w.LevelId == level.Id)
-                .ToList();
-        }
-
-        public static Wall? FindNearestWall(IEnumerable<Wall> walls, XYZ point)
-        {
-            var bestDistance = double.MaxValue;
-            Wall? bestWall = null;
-            foreach (var wall in walls)
-            {
-                var curve = (wall.Location as LocationCurve)?.Curve;
-                if (curve == null) continue;
-                var projection = curve.Project(point);
-                if (projection == null) continue;
-                if (projection.Distance < bestDistance)
-                {
-                    bestDistance = projection.Distance;
-                    bestWall = wall;
-                }
-            }
-
-            return bestWall;
+            log.AppendLine("create_window id=" + instance.Id + " hostWallId=" + host.Id);
         }
 
         private static bool TryReadLocationMeters(JObject op, out double lx, out double ly)

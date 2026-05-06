@@ -169,6 +169,16 @@
                                   Margin="0,0,20,0"
                                   VerticalAlignment="Center"
                                   IsChecked="{Binding AutoCreateDoors}" />
+                        <CheckBox Content="Criar janelas"
+                                  Margin="0,0,20,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding AutoCreateWindows}" />
+                        <CheckBox Content="Criar pisos"
+                                  Margin="0,0,20,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding AutoCreateFloors}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                         <CheckBox Content="Pré-visualizar antes de aplicar"
                                   VerticalAlignment="Center"
                                   IsChecked="{Binding ShowInterpretationPreview}" />

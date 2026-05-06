@@ -101,7 +101,9 @@ namespace RevitSketchPoC.Sketch.Services
                 var result = builder.Build(uiDocument, request, interpretation);
                 var summary = "Concluído. Paredes: " + result.WallsCreated +
                               ", Quartos: " + result.RoomsCreated +
-                              ", Portas: " + result.DoorsCreated + ".";
+                              ", Portas: " + result.DoorsCreated +
+                              ", Janelas: " + result.WindowsCreated +
+                              ", Pisos: " + result.FloorsCreated + ".";
                 FinishUi(ownerWindow, w =>
                 {
                     w.ViewModel.AppendStatus(summary);

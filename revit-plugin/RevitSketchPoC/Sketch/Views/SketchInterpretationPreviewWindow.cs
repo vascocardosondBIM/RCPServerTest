@@ -60,7 +60,7 @@ namespace RevitSketchPoC.Sketch.Views
             });
             var t1 = new TextBlock
             {
-                Text = "Interpretação (paredes a ciano, portas a amarelo, divisões a laranja)",
+                Text = "Interpretação (paredes ciano, portas amarelo, janelas magenta, pisos verde, divisões laranja)",
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 13,
                 Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85)),
@@ -111,7 +111,10 @@ namespace RevitSketchPoC.Sketch.Views
             Grid.SetRow(split, 1);
             root.Children.Add(split);
 
+            var nW = interpretation.Windows?.Count ?? 0;
+            var nF = interpretation.Floors?.Count ?? 0;
             var stats = interpretation.Walls.Count + " paredes · " + interpretation.Doors.Count + " portas · " +
+                        nW + " janelas · " + nF + " pisos · " +
                         interpretation.Rooms.Count + " divisões (rooms)";
             if (!string.IsNullOrWhiteSpace(interpretation.Notes))
             {
@@ -230,6 +233,30 @@ namespace RevitSketchPoC.Sketch.Views
                 points.Add((d.Location.X, d.Location.Y));
             }
 
+            if (interpretation.Windows != null)
+            {
+                foreach (var w in interpretation.Windows)
+                {
+                    points.Add((w.Location.X, w.Location.Y));
+                }
+            }
+
+            if (interpretation.Floors != null)
+            {
+                foreach (var f in interpretation.Floors)
+                {
+                    if (f.Boundary == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var p in f.Boundary)
+                    {
+                        points.Add((p.X, p.Y));
+                    }
+                }
+            }
+
             foreach (var r in interpretation.Rooms)
             {
                 foreach (var p in r.Boundary)
@@ -275,6 +302,30 @@ namespace RevitSketchPoC.Sketch.Views
                     StrokeThickness = 2.5
                 };
                 canvas.Children.Add(line);
+            }
+
+            if (interpretation.Floors != null)
+            {
+                foreach (var f in interpretation.Floors)
+                {
+                    if (f.Boundary == null || f.Boundary.Count < 3)
+                    {
+                        continue;
+                    }
+
+                    var poly = new Polygon
+                    {
+                        Fill = new SolidColorBrush(Color.FromArgb(90, 74, 222, 128)),
+                        Stroke = new SolidColorBrush(Color.FromRgb(34, 197, 94)),
+                        StrokeThickness = 1.2
+                    };
+                    foreach (var p in f.Boundary)
+                    {
+                        poly.Points.Add(new System.Windows.Point(Tx(p.X), Ty(p.Y)));
+                    }
+
+                    canvas.Children.Add(poly);
+                }
             }
 
             foreach (var r in interpretation.Rooms)
@@ -334,6 +385,24 @@ namespace RevitSketchPoC.Sketch.Views
                 Canvas.SetLeft(ell, Tx(d.Location.X) - 5);
                 Canvas.SetTop(ell, Ty(d.Location.Y) - 5);
                 canvas.Children.Add(ell);
+            }
+
+            if (interpretation.Windows != null)
+            {
+                foreach (var win in interpretation.Windows)
+                {
+                    var ell = new Ellipse
+                    {
+                        Width = 10,
+                        Height = 10,
+                        Fill = new SolidColorBrush(Color.FromRgb(232, 121, 249)),
+                        Stroke = Brushes.White,
+                        StrokeThickness = 1
+                    };
+                    Canvas.SetLeft(ell, Tx(win.Location.X) - 5);
+                    Canvas.SetTop(ell, Ty(win.Location.Y) - 5);
+                    canvas.Children.Add(ell);
+                }
             }
 
             var scaleText = new TextBlock

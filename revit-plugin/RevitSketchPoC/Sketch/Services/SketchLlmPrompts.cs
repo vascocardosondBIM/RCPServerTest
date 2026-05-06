@@ -11,7 +11,7 @@ namespace RevitSketchPoC.Sketch.Services
         public static string BuildForSketchRequest(SketchToBimRequest request)
         {
             var user = string.IsNullOrWhiteSpace(request.Prompt)
-                ? "Convert this floor plan sketch into walls, room regions and door points for Revit."
+                ? "Convert this floor plan sketch into walls, room regions, doors, windows, and floor boundaries for Revit."
                 : request.Prompt.Trim();
 
             var sb = new StringBuilder();
@@ -24,7 +24,9 @@ namespace RevitSketchPoC.Sketch.Services
             sb.AppendLine("{");
             sb.AppendLine("  \"walls\": [{\"start\":{\"x\":0,\"y\":0},\"end\":{\"x\":6,\"y\":0},\"heightMeters\":3.0}],");
             sb.AppendLine("  \"rooms\": [{\"name\":\"Kitchen\",\"boundary\":[{\"x\":0,\"y\":0},{\"x\":6,\"y\":0},{\"x\":6,\"y\":6},{\"x\":0,\"y\":6}]}],");
-            sb.AppendLine("  \"doors\": [{\"location\":{\"x\":3,\"y\":0}}],");
+            sb.AppendLine("  \"doors\": [{\"location\":{\"x\":3,\"y\":0},\"doorTypeName\":\"optional type name\"}],");
+            sb.AppendLine("  \"windows\": [{\"location\":{\"x\":1,\"y\":6},\"windowTypeName\":\"optional type name\"}],");
+            sb.AppendLine("  \"floors\": [{\"name\":\"Ground slab\",\"boundary\":[{\"x\":0,\"y\":0},{\"x\":6,\"y\":0},{\"x\":6,\"y\":6},{\"x\":0,\"y\":6}]}],");
             sb.AppendLine("  \"notes\": \"short optional note\"");
             sb.AppendLine("}");
             return sb.ToString();
@@ -62,7 +64,18 @@ namespace RevitSketchPoC.Sketch.Services
             sb.AppendLine("### Doors");
             sb.AppendLine("- Output a door ONLY where a door swing symbol or clear door gap appears in the image on a wall.");
             sb.AppendLine("- Place \"location\" at the approximate midpoint of the door opening on that wall segment (in meters).");
+            sb.AppendLine("- Optional \"doorTypeName\" only if you have no better signal — usually omit so the app picks a default.");
             sb.AppendLine("- Do NOT add extra doors for \"circulation\" if the drawing does not show them.");
+            sb.AppendLine();
+            sb.AppendLine("### Windows");
+            sb.AppendLine("- Output a window ONLY where a window opening, glazing symbol, or clear window in exterior wall appears.");
+            sb.AppendLine("- Place \"location\" at the midpoint of the opening on the wall segment (same XY convention as doors).");
+            sb.AppendLine("- Optional \"windowTypeName\" — omit unless necessary.");
+            sb.AppendLine();
+            sb.AppendLine("### Floors (slab outline)");
+            sb.AppendLine("- For each distinct slab / floor plate that should be a Floor element, add one \"floors\" entry.");
+            sb.AppendLine("- \"boundary\" is a closed polygon (same corner order as rooms): vertices on the inner/outer slab outline consistent with walls.");
+            sb.AppendLine("- You may omit \"floors\" if the plan does not show slabs or it is redundant with room boundaries.");
             sb.AppendLine();
             sb.AppendLine("### Quality check before you answer");
             sb.AppendLine("- Count major enclosed zones in the image vs. your \"rooms\" count — they should match.");

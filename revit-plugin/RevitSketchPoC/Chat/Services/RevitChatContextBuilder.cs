@@ -24,7 +24,6 @@ namespace RevitSketchPoC.Chat.Services
             BuiltInCategory.OST_Doors,
             BuiltInCategory.OST_Windows,
             BuiltInCategory.OST_Floors,
-            BuiltInCategory.OST_Roofs,
             BuiltInCategory.OST_Rooms,
             BuiltInCategory.OST_Furniture,
             BuiltInCategory.OST_GenericModel,
@@ -90,8 +89,82 @@ namespace RevitSketchPoC.Chat.Services
             };
 
             payload["planGeometryInActiveView"] = TryBuildPlanGeometryInActiveView(uidoc);
+            payload["namedTypesForRevitOps"] = BuildNamedTypesForRevitOps(doc);
 
             return JsonConvert.SerializeObject(payload, Formatting.Indented);
+        }
+
+        /// <summary>Type names the LLM should use in revitOps (walls, floors, doors, windows, generic families).</summary>
+        private static Dictionary<string, object?> BuildNamedTypesForRevitOps(Document doc)
+        {
+            const int cap = 36;
+            string[] TakeDistinct(IEnumerable<string> seq) =>
+                seq.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().Take(cap).ToArray();
+
+            var wallTypes = TakeDistinct(
+                new FilteredElementCollector(doc).OfClass(typeof(WallType)).Cast<WallType>().Select(t => t.Name));
+
+            var floorTypes = TakeDistinct(
+                new FilteredElementCollector(doc).OfClass(typeof(FloorType)).Cast<FloorType>().Select(t => t.Name));
+
+            var ceilingTypes = TakeDistinct(
+                new FilteredElementCollector(doc).OfClass(typeof(CeilingType)).Cast<CeilingType>().Select(t => t.Name));
+
+            var doorLabels = new List<string>();
+            foreach (var s in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_Doors)
+                         .OfClass(typeof(FamilySymbol))
+                         .Cast<FamilySymbol>())
+            {
+                if (doorLabels.Count >= cap)
+                {
+                    break;
+                }
+
+                doorLabels.Add((s.Family?.Name ?? "?") + " : " + s.Name);
+            }
+
+            var windowLabels = new List<string>();
+            foreach (var s in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_Windows)
+                         .OfClass(typeof(FamilySymbol))
+                         .Cast<FamilySymbol>())
+            {
+                if (windowLabels.Count >= cap)
+                {
+                    break;
+                }
+
+                windowLabels.Add((s.Family?.Name ?? "?") + " : " + s.Name);
+            }
+
+            var sampleFamilies = new List<string>();
+            foreach (var s in new FilteredElementCollector(doc).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>())
+            {
+                if (sampleFamilies.Count >= cap)
+                {
+                    break;
+                }
+
+                if (s.Category?.CategoryType != CategoryType.Model)
+                {
+                    continue;
+                }
+
+                sampleFamilies.Add((s.Family?.Name ?? "?") + " : " + s.Name);
+            }
+
+            return new Dictionary<string, object?>
+            {
+                ["wallTypeNames"] = wallTypes,
+                ["floorTypeNames"] = floorTypes,
+                ["ceilingTypeNames"] = ceilingTypes,
+                ["doorTypeNames"] = doorLabels.ToArray(),
+                ["windowTypeNames"] = windowLabels.ToArray(),
+                ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
+                ["note"] =
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, familyTypeName in revitOps."
+            };
         }
 
         /// <summary>

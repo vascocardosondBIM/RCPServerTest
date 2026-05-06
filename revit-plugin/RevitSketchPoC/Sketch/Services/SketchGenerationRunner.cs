@@ -52,7 +52,7 @@ namespace RevitSketchPoC.Sketch.Services
                         }
                     }
 
-                    Ui(window, w => w.ViewModel.AppendStatus("Passo 3/3 — A criar paredes/quartos/portas no Revit (thread principal)..."));
+                    Ui(window, w => w.ViewModel.AppendStatus("Passo 3/3 — A criar geometria no Revit (paredes, divisões, portas, janelas, pisos)…"));
                     applyHandler.PrepareSuccess(uidoc, request, interpretation, builder, window);
                     applyEvent.Raise();
                 }

@@ -1,8 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Linq;
 using RevitSketchPoC.Sketch.Contracts;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RevitSketchPoC.Sketch.Services
 {
@@ -55,11 +56,23 @@ namespace RevitSketchPoC.Sketch.Services
 
         public static SketchInterpretation DeserializeAndValidate(string jsonObject)
         {
+            var jo = JObject.Parse(jsonObject);
+            SketchJsonNormalizer.Apply(jo);
+            jsonObject = jo.ToString(Formatting.None);
+
             var interpretation = JsonConvert.DeserializeObject<SketchInterpretation>(jsonObject);
             if (interpretation == null)
             {
                 throw new InvalidOperationException("Could not parse JSON into SketchInterpretation.");
             }
+
+            interpretation.Walls ??= new List<WallSegment>();
+            interpretation.Rooms ??= new List<RoomRegion>();
+            interpretation.Doors ??= new List<DoorPlacement>();
+            interpretation.Windows ??= new List<WindowPlacement>();
+            interpretation.Floors ??= new List<FloorBoundary>();
+
+            SketchJsonNormalizer.DeriveWallsFromRoomBoundariesIfNeeded(interpretation);
 
             if (interpretation.Walls.Count == 0)
             {

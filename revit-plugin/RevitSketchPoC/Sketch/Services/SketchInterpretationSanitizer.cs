@@ -1,5 +1,6 @@
 using RevitSketchPoC.Sketch.Contracts;
 using System;
+using System.Collections.Generic;
 
 namespace RevitSketchPoC.Sketch.Services
 {
@@ -17,6 +18,12 @@ namespace RevitSketchPoC.Sketch.Services
             {
                 return;
             }
+
+            interpretation.Walls ??= new List<WallSegment>();
+            interpretation.Rooms ??= new List<RoomRegion>();
+            interpretation.Doors ??= new List<DoorPlacement>();
+            interpretation.Windows ??= new List<WindowPlacement>();
+            interpretation.Floors ??= new List<FloorBoundary>();
 
             SnapGeometry(interpretation);
             RemoveShortWalls(interpretation);
@@ -62,6 +69,33 @@ namespace RevitSketchPoC.Sketch.Services
                     }
                 }
             }
+
+            if (interpretation.Windows != null)
+            {
+                foreach (var w in interpretation.Windows)
+                {
+                    if (w.Location != null)
+                    {
+                        SnapPoint(w.Location);
+                    }
+                }
+            }
+
+            if (interpretation.Floors != null)
+            {
+                foreach (var f in interpretation.Floors)
+                {
+                    if (f.Boundary == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var p in f.Boundary)
+                    {
+                        SnapPoint(p);
+                    }
+                }
+            }
         }
 
         private static void SnapPoint(Point2D p)
@@ -72,11 +106,6 @@ namespace RevitSketchPoC.Sketch.Services
 
         private static double Snap(double v)
         {
-            if (SnapGridMeters <= 0)
-            {
-                return v;
-            }
-
             return Math.Round(v / SnapGridMeters) * SnapGridMeters;
         }
 

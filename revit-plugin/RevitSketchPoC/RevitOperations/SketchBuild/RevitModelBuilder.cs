@@ -8,7 +8,7 @@ using System;
 
 namespace RevitSketchPoC.RevitOperations.SketchBuild
 {
-    /// <summary>Sketch pipeline entry: sanitizes interpretation then delegates walls / rooms / doors to shared operations.</summary>
+    /// <summary>Sketch pipeline entry: sanitizes interpretation then creates walls, rooms, floors, doors, and windows.</summary>
     public sealed class RevitModelBuilder
     {
         private readonly PluginSettings _settings;
@@ -47,10 +47,22 @@ namespace RevitSketchPoC.RevitOperations.SketchBuild
                     result.RoomsCreated = RevitRoomCreationOps.CreateRoomsFromRegions(doc, level, interpretation.Rooms);
                 }
 
+                if (request.AutoCreateFloors && interpretation.Floors.Count > 0)
+                {
+                    result.FloorsCreated = RevitFloorCreationOps.CreateFloorsFromBoundaries(
+                        doc, level, request.FloorTypeName, interpretation.Floors);
+                }
+
                 if (request.AutoCreateDoors)
                 {
                     result.DoorsCreated = RevitDoorCreationOps.CreateDoorsFromPlacements(
                         doc, level, createdWalls, interpretation.Doors);
+                }
+
+                if (request.AutoCreateWindows && interpretation.Windows.Count > 0)
+                {
+                    result.WindowsCreated = RevitWindowCreationOps.CreateWindowsFromPlacements(
+                        doc, level, createdWalls, interpretation.Windows);
                 }
 
                 tx.Commit();

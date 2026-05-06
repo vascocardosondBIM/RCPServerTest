@@ -23,11 +23,20 @@ namespace RevitSketchPoC.Sketch.Contracts
         [JsonProperty("wallTypeName")]
         public string? WallTypeName { get; set; }
 
+        [JsonProperty("floorTypeName")]
+        public string? FloorTypeName { get; set; }
+
         [JsonProperty("autoCreateRooms")]
         public bool AutoCreateRooms { get; set; } = true;
 
         [JsonProperty("autoCreateDoors")]
         public bool AutoCreateDoors { get; set; } = true;
+
+        [JsonProperty("autoCreateWindows")]
+        public bool AutoCreateWindows { get; set; } = true;
+
+        [JsonProperty("autoCreateFloors")]
+        public bool AutoCreateFloors { get; set; } = true;
 
         [JsonProperty("showPreviewUi")]
         public bool ShowPreviewUi { get; set; } = true;
@@ -43,6 +52,12 @@ namespace RevitSketchPoC.Sketch.Contracts
 
         [JsonProperty("doors")]
         public List<DoorPlacement> Doors { get; set; } = new List<DoorPlacement>();
+
+        [JsonProperty("windows")]
+        public List<WindowPlacement> Windows { get; set; } = new List<WindowPlacement>();
+
+        [JsonProperty("floors")]
+        public List<FloorBoundary> Floors { get; set; } = new List<FloorBoundary>();
 
         [JsonProperty("notes")]
         public string? Notes { get; set; }
@@ -82,6 +97,28 @@ namespace RevitSketchPoC.Sketch.Contracts
     {
         [JsonProperty("location")]
         public Point2D Location { get; set; } = new Point2D();
+
+        /// <summary>Optional Revit door type name (matches project door family symbol).</summary>
+        [JsonProperty("doorTypeName")]
+        public string? DoorTypeName { get; set; }
+    }
+
+    public sealed class WindowPlacement
+    {
+        [JsonProperty("location")]
+        public Point2D Location { get; set; } = new Point2D();
+
+        [JsonProperty("windowTypeName")]
+        public string? WindowTypeName { get; set; }
+    }
+
+    public sealed class FloorBoundary
+    {
+        [JsonProperty("name")]
+        public string? Name { get; set; }
+
+        [JsonProperty("boundary")]
+        public List<Point2D> Boundary { get; set; } = new List<Point2D>();
     }
 
     public sealed class BuildResult
@@ -90,6 +127,8 @@ namespace RevitSketchPoC.Sketch.Contracts
         public int WallsCreated { get; set; }
         public int RoomsCreated { get; set; }
         public int DoorsCreated { get; set; }
+        public int WindowsCreated { get; set; }
+        public int FloorsCreated { get; set; }
         public string? Notes { get; set; }
     }
 }

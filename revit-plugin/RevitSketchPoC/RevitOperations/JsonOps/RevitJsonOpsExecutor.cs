@@ -26,6 +26,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
             var ok = 0;
             var fail = 0;
             var selectOps = new List<JObject>();
+            var placementBatch = new List<(double x, double y, ElementId levelId)>();
 
             using (var tx = new Transaction(doc, "AI Chat — revitOps"))
             {
@@ -74,7 +75,39 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                     ok++;
                                     break;
                                 case "create_door":
-                                    RevitDoorCreationOps.RunCreateDoorJsonOp(doc, opObj, log);
+                                    RevitDoorCreationOps.RunCreateDoorJsonOp(doc, opObj, log, placementBatch);
+                                    ok++;
+                                    break;
+                                case "create_window":
+                                    RevitWindowCreationOps.RunCreateWindowJsonOp(doc, opObj, log, placementBatch);
+                                    ok++;
+                                    break;
+                                case "create_floor":
+                                    RevitFloorCreationOps.RunCreateFloorJsonOp(doc, opObj, log);
+                                    ok++;
+                                    break;
+                                case "create_ceiling":
+                                    RevitCeilingCreationOps.RunCreateCeilingJsonOp(doc, opObj, log);
+                                    ok++;
+                                    break;
+                                case "create_wall_opening":
+                                    RevitWallOpeningOps.RunCreateWallOpeningJsonOp(doc, opObj, log);
+                                    ok++;
+                                    break;
+                                case "flip_wall":
+                                    RevitWallModifyOps.RunFlipWallJsonOp(doc, opObj, log);
+                                    ok++;
+                                    break;
+                                case "create_family_instance":
+                                    RevitFamilyInstanceCreationOps.RunCreateFamilyInstanceJsonOp(doc, opObj, log, placementBatch);
+                                    ok++;
+                                    break;
+                                case "create_level":
+                                    RevitLevelCreationOps.RunCreateLevelJsonOp(doc, opObj, log);
+                                    ok++;
+                                    break;
+                                case "create_grid":
+                                    RevitGridCreationOps.RunCreateGridJsonOp(doc, opObj, log);
                                     ok++;
                                     break;
                                 case "change_element_level":

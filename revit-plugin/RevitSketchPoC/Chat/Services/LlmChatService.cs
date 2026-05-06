@@ -24,8 +24,16 @@ namespace RevitSketchPoC.Chat.Services
             "Answer clearly and concisely in the same language the user writes (Portuguese or English). " +
             "When a JSON block titled Revit context is provided, treat it as read-only facts from the open model: " +
             "do not invent element ids, names, or counts that contradict that data. " +
+            "If the JSON includes \"namedTypesForRevitOps\", use those exact strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, and familyTypeName when emitting revitOps. " +
             "If the JSON includes \"planGeometryInActiveView\" with walls/doors/windows/rooms arrays, use those coordinates (metres, model XY) to compare with a user sketch or to plan create_wall/create_door ops consistently. " +
             "If the user sends an image, describe or use what you see to help with Revit/BIM questions.\n\n" +
+            "### Placement and overlap (critical)\n" +
+            "- When the user does NOT give explicit coordinates or a clear placement rule, do NOT guess arbitrary XY (e.g. 0,0, or the same point as an existing door/window/opening from context). Either ask one short clarifying question, or derive placement only from Revit context (room areas, wall endpoints, element coordinates in planGeometryInActiveView).\n" +
+            "- For create_family_instance and similar point placements: choose a point in visibly clear space using context — offset new instances at least ~0.8 m from door/window locations and from wall openings listed in context unless the user specified an exact spot.\n" +
+            "- Never emit two create_door, two create_window, or door+window at the same (locationX, locationY). Separate openings along the host wall or use distinct segments.\n" +
+            "- create_floor boundaries must not duplicate the same slab outline on the same level unless the user asked to; avoid stacking floors on identical loops.\n" +
+            "- If context is missing, empty, or still ambiguous for safe placement, skip the risky create_* op and explain in prose instead of inventing coordinates.\n" +
+            "- Door/window/family placements in one revitOps batch are rejected if too close to each other or to existing doors/windows (plan guard).\n\n" +
             "### When the user attaches a floor plan, sketch, or screenshot AND wants it built or replicated in Revit\n" +
             "- Your primary goal is FIDELITY to the drawing: same wall layout, proportions, and door openings as visible — do not invent a \"better\" house.\n" +
             "- Use the same conventions as the Sketch-to-BIM tool: coordinates in METRES, origin (0,0) at the bottom-left of the outer footprint; walls axis-aligned unless the image clearly shows diagonals.\n" +
@@ -41,8 +49,16 @@ namespace RevitSketchPoC.Chat.Services
             "- delete_elements: elementIds (array of integers)\n" +
             "- select_elements: elementIds (array of integers)\n" +
             "- create_wall: startX, startY, endX, endY (numbers, metres in project XY, same as sketch upload); optional heightMeters, levelName, wallTypeName (match names from context).\n" +
-            "- create_room: centerX, centerY (metres) or center { x, y }; optional name, levelName.\n" +
-            "- create_door: locationX, locationY (metres) or location { x, y }; optional hostWallId (integer wall id from context); optional levelName. If hostWallId is omitted, the nearest wall on that level is used.\n" +
+            "- create_room: centerX, centerY (metres) or center { x, y }; OR \"boundary\" array (>=3 points) to use centroid; optional name, levelName. Walls must enclose the point.\n" +
+            "- create_door: locationX, locationY (metres) or location { x, y }; optional hostWallId (integer wall id from context); optional levelName; optional doorTypeName (match namedTypesForRevitOps in context). If hostWallId is omitted, the nearest wall on that level is used.\n" +
+            "- create_window: same fields as create_door; optional windowTypeName (match context).\n" +
+            "- create_floor: boundary as array of {x,y} in metres (closed polygon, at least 3 points); optional levelName, floorTypeName (match context), optional name (stored as comment when possible).\n" +
+            "- create_ceiling: same as create_floor but ceilingTypeName (match context) instead of floorTypeName.\n" +
+            "- create_wall_opening: hostWallId (required); positionAlongWallMeters (distance from wall start along curve); openingWidthMeters; openingBaseOffsetMeters (from wall base); openingHeightMeters.\n" +
+            "- flip_wall: elementIds (array) or elementId — flips wall facing.\n" +
+            "- create_family_instance: familyTypeName (required — type name or \"Family : Type\" from context namedTypesForRevitOps.sampleLoadableFamilyTypes); locationX/locationY or location {x,y}; optional levelName; optional rotationDegrees (plan rotation).\n" +
+            "- create_level: name (string), elevationMeters (number — metres from internal origin, same convention as sketch XY origin height reference).\n" +
+            "- create_grid: startX, startY, endX, endY (metres — axis line in plan); optional levelName (sets work plane elevation); optional gridName or name for the grid label.\n" +
             "- change_element_level: default when the user wants to move elements to another level without keeping world position. Same ids/level fields as below; optional preserveWorldPosition (boolean, default false) or preservePosition — set true only when the user explicitly asks to keep the same XYZ in the model.\n" +
             "- change_level_preserve_position: same fields as change_element_level but always preserves world Z (equivalent to preserveWorldPosition true). Use when the user clearly wants height/position unchanged in space.\n" +
             "  Common fields for both: elementIds (array) and/or elementId; targetLevelName or targetLevelId. Supported: FamilyInstance (level-hosted), Wall, Floor, Ceiling.\n" +

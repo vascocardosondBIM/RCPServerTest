@@ -19,6 +19,8 @@ namespace RevitSketchPoC.Sketch.Services
             NormalizeWallsArray(root);
             NormalizeRoomsArray(root);
             NormalizeDoorsArray(root);
+            NormalizeWindowsArray(root);
+            NormalizeFloorsArray(root);
         }
 
         /// <summary>If walls are empty but room polygons exist, build wall segments from shared edges.</summary>
@@ -122,7 +124,7 @@ namespace RevitSketchPoC.Sketch.Services
             foreach (var c in source.Properties())
             {
                 var n = c.Name.ToLowerInvariant();
-                if (n is not ("walls" or "rooms" or "doors" or "notes"))
+                if (n is not ("walls" or "rooms" or "doors" or "windows" or "floors" or "notes"))
                 {
                     continue;
                 }
@@ -343,7 +345,134 @@ namespace RevitSketchPoC.Sketch.Services
                 return null;
             }
 
-            return new JObject { ["location"] = loc };
+            var door = new JObject { ["location"] = loc };
+            var typeTok = FindTokenIgnoreCase(o, "doorTypeName") ?? FindTokenIgnoreCase(o, "door_type");
+            if (typeTok != null && typeTok.Type != JTokenType.Null)
+            {
+                door["doorTypeName"] = typeTok.Type == JTokenType.String ? typeTok : JToken.FromObject(typeTok.ToString());
+            }
+
+            return door;
+        }
+
+        private static void NormalizeWindowsArray(JObject root)
+        {
+            var windows = GetArrayIgnoreCase(root, "windows");
+            if (windows == null)
+            {
+                return;
+            }
+
+            var mapped = new JArray();
+            foreach (var item in windows)
+            {
+                var w = NormalizeWindowObject(item as JObject);
+                if (w != null)
+                {
+                    mapped.Add(w);
+                }
+            }
+
+            if (mapped.Count == 0 && windows.Count > 0)
+            {
+                return;
+            }
+
+            RemovePropertyIgnoreCase(root, "windows");
+            root["windows"] = mapped;
+        }
+
+        private static JObject? NormalizeWindowObject(JObject? o)
+        {
+            if (o == null)
+            {
+                return null;
+            }
+
+            var loc = GetPointObject(o, "location", "position", "point", "pt", "center", "place");
+            if (loc == null)
+            {
+                return null;
+            }
+
+            var win = new JObject { ["location"] = loc };
+            var typeTok = FindTokenIgnoreCase(o, "windowTypeName") ?? FindTokenIgnoreCase(o, "window_type");
+            if (typeTok != null && typeTok.Type != JTokenType.Null)
+            {
+                win["windowTypeName"] = typeTok.Type == JTokenType.String ? typeTok : JToken.FromObject(typeTok.ToString());
+            }
+
+            return win;
+        }
+
+        private static void NormalizeFloorsArray(JObject root)
+        {
+            var floors = GetArrayIgnoreCase(root, "floors");
+            if (floors == null)
+            {
+                return;
+            }
+
+            var mapped = new JArray();
+            foreach (var item in floors)
+            {
+                var f = NormalizeFloorObject(item as JObject);
+                if (f != null)
+                {
+                    mapped.Add(f);
+                }
+            }
+
+            if (mapped.Count == 0 && floors.Count > 0)
+            {
+                return;
+            }
+
+            RemovePropertyIgnoreCase(root, "floors");
+            root["floors"] = mapped;
+        }
+
+        private static JObject? NormalizeFloorObject(JObject? o)
+        {
+            if (o == null)
+            {
+                return null;
+            }
+
+            var boundary = FindTokenIgnoreCase(o, "boundary") as JArray
+                           ?? FindTokenIgnoreCase(o, "vertices") as JArray
+                           ?? FindTokenIgnoreCase(o, "polygon") as JArray;
+
+            var nameTok = FindTokenIgnoreCase(o, "name") ?? FindTokenIgnoreCase(o, "label");
+            var name = nameTok?.Type == JTokenType.String ? nameTok.Value<string>() : nameTok?.ToString();
+
+            if (boundary == null || boundary.Count < 3)
+            {
+                return null;
+            }
+
+            var pts = new JArray();
+            foreach (var p in boundary)
+            {
+                var pt = NormalizePointToken(p);
+                if (pt != null)
+                {
+                    pts.Add(pt);
+                }
+            }
+
+            if (pts.Count < 3)
+            {
+                return null;
+            }
+
+            var floor = new JObject { ["boundary"] = pts };
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                floor["name"] = name;
+            }
+
+            return floor;
         }
 
         private static JArray? GetArrayIgnoreCase(JObject root, string propName)

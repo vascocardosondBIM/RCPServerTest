@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json.Linq;
+using RevitSketchPoC.RevitOperations.Shared;
 using RevitSketchPoC.Sketch.Contracts;
 using System;
 using System.Collections.Generic;
@@ -39,10 +40,24 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
         /// <summary>JSON op <c>create_room</c>: centre in metres on level plane.</summary>
         public static void RunCreateRoomJsonOp(Document doc, JObject op, StringBuilder log)
         {
-            if (!TryReadCenterMeters(op, out var cx, out var cy))
+            double cx;
+            double cy;
+            if (op["boundary"] is JArray boundaryArr)
+            {
+                var pts = RevitOpJsonGeometry.ReadPlanBoundaryMeters(boundaryArr, 3);
+                if (pts.Count < 3)
+                {
+                    throw new InvalidOperationException(
+                        "create_room: \"boundary\" needs at least 3 points {x,y} in metres (centroid is used for placement).");
+                }
+
+                cx = pts.Average(p => p.X);
+                cy = pts.Average(p => p.Y);
+            }
+            else if (!TryReadCenterMeters(op, out cx, out cy))
             {
                 throw new InvalidOperationException(
-                    "create_room requires centerX/centerY (metres) or center object { x, y }.");
+                    "create_room requires centerX/centerY (metres) or center { x, y }, OR \"boundary\" (>=3 points) for centroid placement.");
             }
 
             var levelName = op["levelName"]?.ToString();
@@ -57,7 +72,9 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("create_room: Revit refused placement (" + ex.Message + ").");
+                throw new InvalidOperationException(
+                    "create_room: Revit refused placement (" + ex.Message + "). " +
+                    "Walls must enclose the point on this level (closed loop); add or adjust walls first.");
             }
 
             var roomName = string.IsNullOrWhiteSpace(name) ? "Room" : name.Trim();
