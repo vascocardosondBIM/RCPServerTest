@@ -9,6 +9,9 @@ namespace RevitSketchPoC.Sketch.Services
     {
         public string RawJsonPath { get; set; } = string.Empty;
         public string CleanJsonPath { get; set; } = string.Empty;
+        public string SemanticReadyManifestPath { get; set; } = string.Empty;
+        public string SemanticPixelsPath { get; set; } = string.Empty;
+        public string TilesDirectoryPath { get; set; } = string.Empty;
         public string CleanJsonPreview { get; set; } = string.Empty;
     }
 
@@ -18,7 +21,11 @@ namespace RevitSketchPoC.Sketch.Services
     /// </summary>
     public static class PdfVectorJsonExtractionService
     {
-        public static PdfVectorJsonExtractionResult Extract(string pdfPath, int pageNumber)
+        public static PdfVectorJsonExtractionResult Extract(
+            string pdfPath,
+            int pageNumber,
+            int tileSizePt,
+            int rasterDpi)
         {
             if (string.IsNullOrWhiteSpace(pdfPath) || !File.Exists(pdfPath))
             {
@@ -26,6 +33,8 @@ namespace RevitSketchPoC.Sketch.Services
             }
 
             var requestedPage = pageNumber < 1 ? 1 : pageNumber;
+            var normalizedTileSizePt = tileSizePt < 64 ? 64 : tileSizePt;
+            var normalizedRasterDpi = rasterDpi < 72 ? 72 : rasterDpi;
             var tempDir = Path.Combine(Path.GetTempPath(), "RevitSketchPoC", "pdf-json");
             Directory.CreateDirectory(tempDir);
 
@@ -41,15 +50,35 @@ namespace RevitSketchPoC.Sketch.Services
 
             var rawJsonPath = basePath + "_raw.json";
             var cleanJsonPath = basePath + "_clean.json";
+            var semanticReadyManifestPath = basePath + "_semantic_ready_manifest.json";
+            var semanticPixelsPath = basePath + "_semantic_pixels.json";
+            var tilesDirectoryPath = basePath + "_tiles";
 
             var scriptPath = EnsurePythonScript(tempDir);
-            RunPythonExtraction(scriptPath, pdfPath, rawJsonPath, cleanJsonPath, requestedPage);
+            RunPythonExtraction(
+                scriptPath,
+                pdfPath,
+                rawJsonPath,
+                cleanJsonPath,
+                semanticReadyManifestPath,
+                semanticPixelsPath,
+                tilesDirectoryPath,
+                normalizedTileSizePt,
+                normalizedRasterDpi,
+                requestedPage);
+
+            // Guarantees the semantic contract template is structurally valid
+            // before any downstream matching/calibration consumes it.
+            SemanticPixelsValidator.ValidateTemplate(semanticPixelsPath, semanticReadyManifestPath);
 
             var preview = ReadPreview(cleanJsonPath, 30000);
             return new PdfVectorJsonExtractionResult
             {
                 RawJsonPath = rawJsonPath,
                 CleanJsonPath = cleanJsonPath,
+                SemanticReadyManifestPath = semanticReadyManifestPath,
+                SemanticPixelsPath = semanticPixelsPath,
+                TilesDirectoryPath = tilesDirectoryPath,
                 CleanJsonPreview = preview
             };
         }
@@ -57,13 +86,10 @@ namespace RevitSketchPoC.Sketch.Services
         private static string EnsurePythonScript(string tempDir)
         {
             var scriptPath = Path.Combine(tempDir, "extract_pdf_vector_json.py");
-            if (File.Exists(scriptPath))
-            {
-                return scriptPath;
-            }
-
+            // Always rewrite to ensure latest embedded script logic is used,
+            // even when older versions already exist in %TEMP%.
             var script = @"
-import fitz, json, sys, datetime, math
+import fitz, json, sys, datetime, math, os
 
 def r(v):
     return round(float(v), 4)
@@ -77,7 +103,12 @@ def rect_to_bbox(rect):
 pdf_path = sys.argv[1]
 out_raw = sys.argv[2]
 out_clean = sys.argv[3]
-page_num = int(sys.argv[4])
+out_manifest = sys.argv[4]
+out_semantic_pixels = sys.argv[5]
+tiles_dir = sys.argv[6]
+tile_size_pt = float(sys.argv[7])
+tile_raster_dpi = float(sys.argv[8])
+page_num = int(sys.argv[9])
 
 doc = fitz.open(pdf_path)
 if page_num < 1 or page_num > doc.page_count:
@@ -277,6 +308,106 @@ for wd in text_words:
         'word_no': wd['word_no']
     })
 
+def bbox_for_line(ln):
+    x0 = min(ln['from']['x'], ln['to']['x'])
+    y0 = min(ln['from']['y'], ln['to']['y'])
+    x1 = max(ln['from']['x'], ln['to']['x'])
+    y1 = max(ln['from']['y'], ln['to']['y'])
+    return [r(x0), r(y0), r(x1), r(y1)]
+
+def bbox_for_bezier(bz):
+    xs = [bz['p1']['x'], bz['p2']['x'], bz['p3']['x'], bz['p4']['x']]
+    ys = [bz['p1']['y'], bz['p2']['y'], bz['p3']['y'], bz['p4']['y']]
+    return [r(min(xs)), r(min(ys)), r(max(xs)), r(max(ys))]
+
+def clamp_bbox_to_page(bbox, width, height):
+    x0 = max(0.0, min(width, float(bbox[0])))
+    y0 = max(0.0, min(height, float(bbox[1])))
+    x1 = max(0.0, min(width, float(bbox[2])))
+    y1 = max(0.0, min(height, float(bbox[3])))
+    if x1 < x0:
+        x0, x1 = x1, x0
+    if y1 < y0:
+        y0, y1 = y1, y0
+    return [r(x0), r(y0), r(x1), r(y1)]
+
+def tile_count_for_axis(size_pt, tile_pt):
+    return int(math.ceil(size_pt / tile_pt))
+
+def tile_id_from_row_col(row, col):
+    return f'tile_r{row}_c{col}'
+
+rows_count = tile_count_for_axis(height, tile_size_pt)
+cols_count = tile_count_for_axis(width, tile_size_pt)
+tile_index = {}
+
+def ensure_tile(row, col):
+    row = max(0, min(rows_count - 1, int(row)))
+    col = max(0, min(cols_count - 1, int(col)))
+    tile_id = tile_id_from_row_col(row, col)
+    if tile_id not in tile_index:
+        x0 = col * tile_size_pt
+        y0 = row * tile_size_pt
+        x1 = min(width, (col + 1) * tile_size_pt)
+        y1 = min(height, (row + 1) * tile_size_pt)
+        tile_index[tile_id] = {
+            'tile_id': tile_id,
+            'row': row,
+            'col': col,
+            'bbox_pt': [r(x0), r(y0), r(x1), r(y1)],
+            'entity_refs': {
+                'lines': [],
+                'beziers': [],
+                'rectangles': [],
+                'text_words': []
+            }
+        }
+    return tile_id
+
+def tile_range_from_bbox(bbox):
+    x0, y0, x1, y1 = clamp_bbox_to_page(bbox, width, height)
+    eps = 1e-6
+    col_min = int(max(0.0, x0) // tile_size_pt)
+    row_min = int(max(0.0, y0) // tile_size_pt)
+    col_max = int(max(0.0, x1 - eps) // tile_size_pt)
+    row_max = int(max(0.0, y1 - eps) // tile_size_pt)
+    col_max = min(cols_count - 1, col_max)
+    row_max = min(rows_count - 1, row_max)
+    return row_min, row_max, col_min, col_max
+
+def add_entity_to_tiles(entity_type, entity_index, bbox):
+    row_min, row_max, col_min, col_max = tile_range_from_bbox(bbox)
+    for row in range(row_min, row_max + 1):
+        for col in range(col_min, col_max + 1):
+            tid = ensure_tile(row, col)
+            tile_index[tid]['entity_refs'][entity_type].append(entity_index)
+
+for idx, ln in enumerate(clean_lines):
+    add_entity_to_tiles('lines', idx, bbox_for_line(ln))
+
+for idx, bz in enumerate(clean_beziers):
+    add_entity_to_tiles('beziers', idx, bbox_for_bezier(bz))
+
+for idx, rc in enumerate(clean_rectangles):
+    add_entity_to_tiles('rectangles', idx, rc['bbox_pt'])
+
+for idx, wd in enumerate(clean_words):
+    add_entity_to_tiles('text_words', idx, wd['bbox_pt'])
+
+for tile in tile_index.values():
+    tile['counts'] = {
+        'lines': len(tile['entity_refs']['lines']),
+        'beziers': len(tile['entity_refs']['beziers']),
+        'rectangles': len(tile['entity_refs']['rectangles']),
+        'text_words': len(tile['entity_refs']['text_words']),
+    }
+    tile['counts']['total'] = (
+        tile['counts']['lines'] +
+        tile['counts']['beziers'] +
+        tile['counts']['rectangles'] +
+        tile['counts']['text_words']
+    )
+
 clean_result = {
     'source_pdf': pdf_path,
     'generated_at_utc': datetime.datetime.utcnow().isoformat() + 'Z',
@@ -291,6 +422,13 @@ clean_result = {
             'removed_micro_segments': removed_micro
         }
     },
+    'spatial_index': {
+        'enabled': True,
+        'tile_size_pt': r(tile_size_pt),
+        'rows': rows_count,
+        'cols': cols_count,
+        'tile_count_with_content': len(tile_index)
+    },
     'summary': {
         'pages': doc.page_count,
         'selected_page_number': page_num,
@@ -299,7 +437,8 @@ clean_result = {
         'text_words_count': len(text_words),
         'clean_lines_count': len(clean_lines),
         'clean_beziers_count': len(clean_beziers),
-        'clean_rectangles_count': len(clean_rectangles)
+        'clean_rectangles_count': len(clean_rectangles),
+        'tiles_with_content': len(tile_index)
     },
     'page': {
         'page_index': page_num - 1,
@@ -315,7 +454,8 @@ clean_result = {
             'other_path_commands': others
         },
         'text_words': clean_words
-    }
+    },
+    'tile_index': sorted(tile_index.values(), key=lambda t: (t['row'], t['col']))
 }
 
 with open(out_raw, 'w', encoding='utf-8') as f:
@@ -324,8 +464,77 @@ with open(out_raw, 'w', encoding='utf-8') as f:
 with open(out_clean, 'w', encoding='utf-8') as f:
     json.dump(clean_result, f, ensure_ascii=False, indent=2)
 
+os.makedirs(tiles_dir, exist_ok=True)
+scale = tile_raster_dpi / 72.0
+matrix = fitz.Matrix(scale, scale)
+tile_images = []
+for tile in sorted(tile_index.values(), key=lambda t: (t['row'], t['col'])):
+    if tile['counts']['total'] <= 0:
+        continue
+    x0, y0, x1, y1 = tile['bbox_pt']
+    clip = fitz.Rect(float(x0), float(y0), float(x1), float(y1))
+    pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+    file_name = tile['tile_id'] + '.png'
+    image_path = os.path.join(tiles_dir, file_name)
+    pix.save(image_path)
+    tile_images.append({
+        'tile_id': tile['tile_id'],
+        'row': tile['row'],
+        'col': tile['col'],
+        'bbox_pt': tile['bbox_pt'],
+        'bbox_px': [0, 0, int(pix.width), int(pix.height)],
+        'image_path': image_path,
+        'image_width_px': int(pix.width),
+        'image_height_px': int(pix.height)
+    })
+
+manifest = {
+    'source_pdf': pdf_path,
+    'generated_at_utc': datetime.datetime.utcnow().isoformat() + 'Z',
+    'selected_page_number': page_num,
+    'tile_strategy': {
+        'tile_size_pt': r(tile_size_pt),
+        'raster_dpi': r(tile_raster_dpi),
+        'scale_px_per_pt': r(scale)
+    },
+    'page': {
+        'width_pt': r(width),
+        'height_pt': r(height),
+        'rotation_degrees': 0
+    },
+    'artifacts': {
+        'raw_json_path': out_raw,
+        'clean_json_path': out_clean,
+        'semantic_pixels_path': out_semantic_pixels,
+        'tiles_dir': tiles_dir
+    },
+    'tiles': tile_images
+}
+
+semantic_pixels = {
+    'schema': 'semantic_pixels.v1',
+    'generated_at_utc': datetime.datetime.utcnow().isoformat() + 'Z',
+    'source_pdf': pdf_path,
+    'page': page_num,
+    'contract': {
+        'required_fields': ['type', 'confidence', 'bbox', 'page', 'tile_id'],
+        'bbox_format': '[x0, y0, x1, y1] in pixels relative to the tile image',
+        'type_allowed_examples': ['wall', 'door', 'window', 'room', 'stairs', 'column', 'other'],
+        'confidence_range': [0.0, 1.0]
+    },
+    'detections': []
+}
+
+with open(out_manifest, 'w', encoding='utf-8') as f:
+    json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+with open(out_semantic_pixels, 'w', encoding='utf-8') as f:
+    json.dump(semantic_pixels, f, ensure_ascii=False, indent=2)
+
 print(out_raw)
 print(out_clean)
+print(out_manifest)
+print(out_semantic_pixels)
 doc.close()
 ";
 
@@ -338,6 +547,11 @@ doc.close()
             string pdfPath,
             string rawJsonPath,
             string cleanJsonPath,
+            string semanticReadyManifestPath,
+            string semanticPixelsPath,
+            string tilesDirectoryPath,
+            int tileSizePt,
+            int rasterDpi,
             int pageNumber)
         {
             var startInfo = new ProcessStartInfo
@@ -348,6 +562,11 @@ doc.close()
                     "\"" + pdfPath + "\" " +
                     "\"" + rawJsonPath + "\" " +
                     "\"" + cleanJsonPath + "\" " +
+                    "\"" + semanticReadyManifestPath + "\" " +
+                    "\"" + semanticPixelsPath + "\" " +
+                    "\"" + tilesDirectoryPath + "\" " +
+                    tileSizePt + " " +
+                    rasterDpi + " " +
                     pageNumber,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -398,11 +617,16 @@ doc.close()
                     throw new InvalidOperationException("Timeout ao gerar JSON vetorial (180s).");
                 }
 
-                if (process.ExitCode != 0 || !File.Exists(rawJsonPath) || !File.Exists(cleanJsonPath))
+                if (process.ExitCode != 0 ||
+                    !File.Exists(rawJsonPath) ||
+                    !File.Exists(cleanJsonPath) ||
+                    !File.Exists(semanticReadyManifestPath) ||
+                    !File.Exists(semanticPixelsPath) ||
+                    !Directory.Exists(tilesDirectoryPath))
                 {
                     throw new InvalidOperationException(
                         "Falha a gerar JSON vetorial do PDF.\n" +
-                        "A extração agora gera 2 ficheiros: *_raw.json e *_clean.json.\n" +
+                        "A extração agora gera raw/clean + semantic_ready_manifest + semantic_pixels + tiles.\n" +
                         "Confirma Python + PyMuPDF instalados (`python -m pip install pymupdf`).\n" +
                         "stderr: " + stdErr.ToString().Trim() + "\n" +
                         "stdout: " + stdOut.ToString().Trim());

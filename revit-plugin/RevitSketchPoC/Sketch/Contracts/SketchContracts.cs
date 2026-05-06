@@ -49,6 +49,23 @@ namespace RevitSketchPoC.Sketch.Contracts
     {
         public string PdfPath { get; set; } = string.Empty;
         public int PdfPageNumber { get; set; } = 1;
+        public int TileSizePt { get; set; } = 256;
+        public int RasterDpi { get; set; } = 300;
+    }
+
+    public sealed class SemanticTileInferenceRequest
+    {
+        public string CleanJsonPath { get; set; } = string.Empty;
+        public string SemanticReadyManifestPath { get; set; } = string.Empty;
+        public string SemanticPixelsPath { get; set; } = string.Empty;
+        public double MaxSnapDistancePt { get; set; } = 6.0;
+        public string CalibrationMode { get; set; } = "AutoScale";
+        public int ManualScaleDenominator { get; set; } = 100;
+        public double ReferenceP1XPt { get; set; }
+        public double ReferenceP1YPt { get; set; }
+        public double ReferenceP2XPt { get; set; }
+        public double ReferenceP2YPt { get; set; }
+        public double ReferenceDistanceMeters { get; set; }
     }
 
     public sealed class SketchInterpretation

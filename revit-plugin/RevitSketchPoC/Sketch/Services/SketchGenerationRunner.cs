@@ -25,7 +25,7 @@ namespace RevitSketchPoC.Sketch.Services
             window.ViewModel.IsBusy = true;
             window.ViewModel.ClearStatus();
             window.ViewModel.AppendStatus("Passo 1/3 — A preparar pedido (imagem + instruções).");
-            window.ViewModel.AppendStatus("Passo 2/3 — A enviar ao Ollama em segundo plano (o Revit deve continuar a responder; pode demorar).");
+            window.ViewModel.AppendStatus("Passo 2/3 — A enviar ao LLM em segundo plano (o Revit deve continuar a responder; pode demorar).");
 
             var builder = pipeline.Builder;
 
@@ -57,7 +57,7 @@ namespace RevitSketchPoC.Sketch.Services
                     }
 
                     Ui(window, w => w.ViewModel.AppendStatus("Passo 3/3 — A criar geometria no Revit (paredes, divisões, portas, janelas, pisos)…"));
-                    applyHandler.PrepareSuccess(uidoc, request, interpretation, builder, window);
+                    applyHandler.PrepareSuccess(uidoc, normalizedRequest, interpretation, builder, window);
                     applyEvent.Raise();
                 }
                 catch (Exception ex)
