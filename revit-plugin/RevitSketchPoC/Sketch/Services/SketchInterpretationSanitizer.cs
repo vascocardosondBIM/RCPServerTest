@@ -1,4 +1,5 @@
 using RevitSketchPoC.Sketch.Contracts;
+using RevitSketchPoC.Core.Geometry;
 using System;
 using System.Collections.Generic;
 
@@ -9,9 +10,6 @@ namespace RevitSketchPoC.Sketch.Services
     /// </summary>
     public static class SketchInterpretationSanitizer
     {
-        private const double MinSegmentLengthMeters = 0.35;
-        private const double SnapGridMeters = 0.05;
-
         public static void SanitizeInPlace(SketchInterpretation interpretation)
         {
             if (interpretation == null)
@@ -106,7 +104,7 @@ namespace RevitSketchPoC.Sketch.Services
 
         private static double Snap(double v)
         {
-            return Math.Round(v / SnapGridMeters) * SnapGridMeters;
+            return PlanGeometryRules.Snap(v);
         }
 
         private static void RemoveShortWalls(SketchInterpretation interpretation)
@@ -116,7 +114,7 @@ namespace RevitSketchPoC.Sketch.Services
                 return;
             }
 
-            interpretation.Walls.RemoveAll(w => SegmentLengthMeters(w) < MinSegmentLengthMeters);
+            interpretation.Walls.RemoveAll(w => SegmentLengthMeters(w) < PlanGeometryRules.MinWallSegmentLengthMeters);
         }
 
         private static double SegmentLengthMeters(WallSegment w)

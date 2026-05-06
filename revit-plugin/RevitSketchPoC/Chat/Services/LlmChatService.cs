@@ -49,6 +49,7 @@ namespace RevitSketchPoC.Chat.Services
             "- delete_elements: elementIds (array of integers)\n" +
             "- select_elements: elementIds (array of integers)\n" +
             "- create_wall: startX, startY, endX, endY (numbers, metres in project XY, same as sketch upload); optional heightMeters, levelName, wallTypeName (match names from context).\n" +
+            "- create_wall_arc: curved wall in metres; either (startX,startY,endX,endY,midX,midY) or (centerX,centerY,radiusMeters,startAngleDegrees,endAngleDegrees); optional heightMeters, levelName, wallTypeName.\n" +
             "- create_room: centerX, centerY (metres) or center { x, y }; OR \"boundary\" array (>=3 points) to use centroid; optional name, levelName. Walls must enclose the point.\n" +
             "- create_door: locationX, locationY (metres) or location { x, y }; optional hostWallId (integer wall id from context); optional levelName; optional doorTypeName (match namedTypesForRevitOps in context). If hostWallId is omitted, the nearest wall on that level is used.\n" +
             "- create_window: same fields as create_door; optional windowTypeName (match context).\n" +

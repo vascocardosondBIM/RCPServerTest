@@ -27,6 +27,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
             var fail = 0;
             var selectOps = new List<JObject>();
             var placementBatch = new List<(double x, double y, ElementId levelId)>();
+            var wallBatchKeys = new HashSet<string>(StringComparer.Ordinal);
 
             using (var tx = new Transaction(doc, "AI Chat — revitOps"))
             {
@@ -67,7 +68,11 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                     ok++;
                                     break;
                                 case "create_wall":
-                                    RevitWallCreationOps.RunCreateWallJsonOp(doc, opObj, settings, log);
+                                    RevitWallCreationOps.RunCreateWallJsonOp(doc, opObj, settings, log, wallBatchKeys);
+                                    ok++;
+                                    break;
+                                case "create_wall_arc":
+                                    RevitWallCreationOps.RunCreateWallArcJsonOp(doc, opObj, settings, log, wallBatchKeys);
                                     ok++;
                                     break;
                                 case "create_room":
