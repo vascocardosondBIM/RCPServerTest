@@ -18,7 +18,7 @@ No **mesmo** servidor MCP Node: a maioria das tools fala com o plugin original e
 | Pasta | Função |
 | --- | --- |
 | **`Core/`** | Peças transversais: `Application/SketchToBimApp.cs` (classe `RevitSketchPoC.App.SketchToBimApp` — entrada do add-in, ribbon, `ExternalEvent`), `Configuration/PluginSettings.cs` (lê `pluginsettings.json`), `ViewModels/RelayCommand.cs`, `RevitModelessWindowHost.cs` (abrir janelas WPF no `Idling` para evitar erros com o Revit). |
-| **`Chat/`** | **Assistente IA** no Revit: comandos ribbon, `LlmChatService` (Ollama / Gemini / NVIDIA OpenAI-compatible), contexto JSON do projeto (`RevitChatContextBuilder`, incl. geometria em planta quando aplicável), parsing de `revitOps`, janela WPF embutida (`Views/`), markdown simples nas mensagens. |
+| **`Chat/`** | **Assistente IA** no Revit: ribbon, `LlmChatService`, contexto JSON (`RevitChatContextBuilder`, geometria em planta quando aplicável), anexos de imagem, parsing e aplicação de `revitOps` (`ChatRevitOpsParser`, `ExternalEvent`). Ver [Assistente IA (chat)](#assistente-ia-chat). |
 | **`Sketch/`** | **Sketch → BIM**: fluxo de imagem + prompt → LLM → JSON de paredes/divisões/portas; `SketchLlmPrompts`, intérpretes Ollama / Gemini / NVIDIA, `SketchGenerationRunner`, **pré-visualização** (`SketchInterpretationPreviewWindow`) antes de aplicar, janela de upload (`SketchUploadWindow` + XAML embutido). |
 | **`RevitOperations/`** | Operações sobre o modelo Revit usadas pelo sketch e pelo chat: **`CreateElements/`** (paredes, portas, salas), **`SketchBuild/`** (`RevitModelBuilder` — transação única após interpretação), **`JsonOps/`** (`RevitJsonOpsExecutor` — `revitOps` do chat), **`ChangeElements/`**, **`DeleteElements/`**, **`SelectElements/`**, **`Shared/`** (helpers partilhados). |
 | **`Integration/`** | Ligação **TCP JSON-RPC** ao bridge Node: **`Rpc/`** (servidor, dispatcher para API thread), **`Routing/`** (`McpCommandRouter` — método `create_house_from_sketch`), **`Contracts/`** (DTOs do protocolo). |
@@ -31,8 +31,74 @@ Ficheiros na **raiz desta pasta**: `RevitSketchPoC.csproj`, `RevitSketchPoC.sln`
 ## Fluxos principais
 
 1. **Ribbon “Sketch AI PoC” → Upload sketch** — escolhes imagem e prompt; o LLM devolve JSON; opcionalmente vês a **pré-visualização** (imagem vs. interpretação); depois o Revit cria paredes/quartos/portas numa transação.
-2. **Ribbon → Assistente IA** — conversa multimodal com contexto do projeto; o modelo pode devolver um bloco ` ```json ` com `revitOps` para alterar parâmetros, criar paredes pontuais, etc. (ver `LlmChatService` e `RevitJsonOpsExecutor`).
+2. **Ribbon → Assistente IA (AI Chat)** — conversa com o modelo, contexto JSON do projeto/seleção, imagens opcionais, e aplicação automática de `revitOps` no Revit. **Documentação detalhada:** secção [Assistente IA (chat)](#assistente-ia-chat) abaixo.
 3. **MCP `create_house_from_sketch`** — o Node envia o pedido por TCP para este add-in; o mesmo pipeline de interpretação + build que o sketch na UI.
+
+---
+
+## Assistente IA (chat)
+
+O chat é a janela **“Assistente IA”** (ribbon **Sketch AI PoC** → botão **AI / Chat**). Usa o mesmo `pluginsettings.json` que o sketch (**Ollama**, **Gemini** ou **NVIDIA**). Código principal: `Chat/Services/LlmChatService.cs` (instruções de sistema + chamadas HTTP), `Chat/ViewModels/LlmChatViewModel.cs` (UI e contexto), `Chat/Services/RevitChatContextBuilder.cs` (JSON do projeto), `Chat/Services/ChatRevitOpsParser.cs` (extrair `revitOps`), `RevitOperations/JsonOps/RevitJsonOpsExecutor.cs` (executar ops no modelo).
+
+### O que o utilizador pode fazer
+
+| Área | Descrição |
+| --- | --- |
+| **Conversa geral** | Perguntas sobre Revit/BIM, interpretação de plantas ou do modelo — o assistente responde na **mesma língua** que escreves (português ou inglês), salvo pedido explícito em contrário. |
+| **Texto + imagem** | Mensagens só texto, ou **anexar imagem** (PNG, JPG/JPEG, WebP, BMP; até ~6 MB) a enviar **com a próxima** mensagem; na bolha do utilizador aparece pré-visualização da imagem. Modelos **com visão** (ex. Ollama `llava`) analisam a figura. |
+| **Contexto do projeto** | Botão **Atualizar projeto** — gera de novo o JSON do documento: título/caminho, vista ativa, níveis (até 20), contagens por categoria, `namedTypesForRevitOps` (nomes de tipos a usar em `wallTypeName`, `doorTypeName`, etc.), e **`planGeometryInActiveView`** quando faz sentido (paredes/portas/janelas/salas em **metros**, XY do modelo, com limites de contagem). |
+| **Contexto de seleção** | No Revit, seleciona elementos → **Incluir seleção** — acrescenta um segundo bloco JSON só com a seleção atual (ids e metadados). **Limpar seleção** remove esse extra. |
+| **Aplicar mudanças no Revit** | Se a resposta do modelo incluir JSON com raiz `"revitOps": [ … ]` (muitas vezes dentro de um cercado de código Markdown com etiqueta `json`), o add-in **extrai**, corre as operações na thread do Revit (`ExternalEvent`) e mostra uma linha **`[Revit] …`** com resumo (sucessos/falhas e mensagens de log). |
+| **Histórico** | Todas as bolhas da janela entram no pedido ao LLM como turnos user/assistant (multimodal por turno quando há imagem na mensagem do utilizador). |
+
+### Formato `revitOps`
+
+O assistente é instruído a devolver **um único** objeto JSON na mensagem, com esta forma:
+
+```json
+{ "revitOps": [ { "op": "nome_da_op", ... }, ... ] }
+```
+
+O parser aceita: vários blocos fenced com ou sem etiqueta `json` (usa o primeiro que parsear com sucesso), ou texto que termine com um `{ ... }` contendo `revitOps`.
+
+### Transacções e ops especiais
+
+- A maior parte das `revitOps` corre **numa única transação** Revit.
+- **`create_wall_roman_arch_profile`** e **`create_wall_custom_profile_void`** são exceções: **confirmam** a transação em curso, aplicam a edição de perfil da parede (incluindo `SketchEditScope` onde aplicável), **abrem nova transação** e seguem com as restantes entradas do array. Isto evita misturar estados inválidos com outras criações no mesmo lote.
+
+### Lista de operações `op` (referência rápida)
+
+Cada entrada do array é um objeto com `"op"` e campos específicos (metros em XY quando indicado; ids devem vir do contexto quando possível).
+
+| `op` | Função resumida |
+| --- | --- |
+| `set_parameter` | Alterar parâmetro por `elementId`; `parameterName` e/ou `builtInParameter`; `value` como string (`SetValueString`). |
+| `delete_elements` | Apagar por `elementIds` (até 50 ids por chamada interna). |
+| `select_elements` | Selecionar elementos na UI; corre **após** o commit da transação principal. |
+| `create_wall` | Parede recta: `startX/Y`, `endX/Y` (m); opcionais `heightMeters`, `levelName`, `wallTypeName`. |
+| `create_wall_arc` | Parede curva: arco por três pontos ou por centro + raio + ângulos; opcionais como `create_wall`. |
+| `create_room` | Sala: centro ou `boundary` (polígono fechado); opcionais `name`, `levelName`. |
+| `create_door` / `create_window` | Porta/janela: `locationX/Y` ou `location`; opcionais `hostWallId`, `levelName`, tipo; há validação de proximidade em lote. |
+| `create_floor` / `create_ceiling` | Laje/teto: `boundary` [{x,y}, …]; opcionais `levelName`, tipo, `name` (comentário). |
+| `analyze_floor_wall_footprint` | Leitura: compara footprint do pavimento com cadeia de paredes; escreve métricas no log da execução. |
+| `repair_floor_to_wall_footprint` | Recria o piso a partir das curvas de parede (alinhamento a eixo/interior/exterior). |
+| `create_wall_opening` | Vão rectangular na parede (posição ao longo da parede ou rácio, dimensões). |
+| `create_wall_arch_opening` | Porta **família** em arco (agendas de portas); não confundir com furo só em perfil. |
+| `create_wall_roman_arch_profile` | **Arco romano** editando o **perfil** da parede recta (sem porta); ver `RevitWallArchProfileOps`. |
+| `create_wall_custom_profile_void` | **Buraco fechado** através da espessura (loop interior no sketch de perfil): `hostWallId`; `shape` com `kind` **star**, **regularPolygon**, **triangle**, **diamond**, **cross/plus**, **heart**, ou **`boundary`** com pontos `{ alongMeters, heightFromWallBaseMeters }`; vários vãos com `voids[]`. Arcos romanos aqui **não** — usar `create_wall_roman_arch_profile`. |
+| `flip_wall` | Inverter face da parede (`elementId` ou `elementIds`). |
+| `create_family_instance` | Instância de família loadable: `familyTypeName`, posição; opcionais `levelName`, `rotationDegrees`. |
+| `create_level` | Novo nível: `name`, `elevationMeters` (origem interna). |
+| `create_grid` | Eixo: `startX/Y`, `endX/Y`; opcionais `levelName`, nome do eixo. |
+| `change_element_level` | Mudar nível de elementos; opcional `preserveWorldPosition` / `preservePosition` para manter XYZ. |
+| `change_level_preserve_position` | Igual mas **sempre** preserva posição no mundo. |
+
+### Boas práticas e limitações
+
+- Usa **nomes de tipo** que apareçam em `namedTypesForRevitOps` no contexto.
+- **Não inventar** ids: preferir os do snapshot de seleção ou texto do contexto.
+- Lotes **muito grandes** podem ser lentos ou falhar a meio; o sistema pede preferência por poucas ops ou pelo fluxo **Sketch → BIM** para plantas completas.
+- O assistente recebe regras anti-sobreposição (portas/janelas no mesmo ponto, pisos duplicados, etc.) no prompt de sistema.
 
 ---
 
@@ -130,7 +196,7 @@ Resumo no status do plugin:
 > python -m pip install pymupdf
 > ```
 
-**Assistente IA** — conversa com contexto do documento; em vista de planta o contexto pode incluir `planGeometryInActiveView` (coordenadas aproximadas de paredes/portas/salas).
+**Assistente IA** — vê a secção [Assistente IA (chat)](#assistente-ia-chat) (contexto JSON, imagens, tabela de `revitOps`).
 
 ---
 

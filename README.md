@@ -107,6 +107,8 @@ Fluxo resumido:
 2. O plugin chama o LLM (**Ollama**, **Gemini** ou **NVIDIA** conforme `LlmProvider` e restantes campos em `pluginsettings.json`; o servidor MCP Node não escolhe o modelo).
 3. Resposta estruturada → criação de elementos numa `Transaction` no Revit.
 
+**Assistente IA (chat no Revit)** — mesmo add-in: conversa com contexto do projeto (JSON + geometria em planta), imagens opcionais, e aplicação automática de alterações quando o modelo devolve `revitOps` (paredes, pisos, portas, parâmetros, perfis de arco, etc.). Documentação completa na secção **«Assistente IA (chat)»** do ficheiro [`revit-plugin/RevitSketchPoC/README.md`](revit-plugin/RevitSketchPoC/README.md).
+
 ## Licença
 
 [MIT](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit/blob/main/LICENSE)
