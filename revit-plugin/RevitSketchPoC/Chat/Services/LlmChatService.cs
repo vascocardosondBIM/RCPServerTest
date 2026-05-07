@@ -63,11 +63,17 @@ namespace RevitSketchPoC.Chat.Services
             "- create_wall_custom_profile_void: CLOSED HOLE through wall thickness (inner profile loop). hostWallId (straight wall). " +
             "One void: root \"shape\" { kind, ... } or \"boundary\" [ { alongMeters, heightFromWallBaseMeters }, ... ] (>=3). " +
             "Several voids: \"voids\": [ { \"shape\": { kind, ... }, \"centerAlongMeters\": ..., \"centerHeightFromWallBaseMeters\": ... } ] — center/rotation may be siblings of \"shape\" in the same object (merged automatically), or inside \"shape\". " +
-            "Parametric kinds need centerAlongMeters, centerHeightFromWallBaseMeters, optional rotationDegrees. " +
-            "Supported kinds: star (outerRadiusMeters, points/tips, optional innerRadiusMeters); regularPolygon (radiusMeters, sides); " +
+            "Parametric kinds need centerAlongMeters, centerHeightFromWallBaseMeters (or omit and set positionRatio 0..1 × wall length → centerAlongMeters, heightPositionRatio 0..1 × wall height → center height — plugin fills shape). " +
+            "optional rotationDegrees. " +
+            "Supported kinds: circle (radiusMeters, optional startAngleDegrees/endAngleDegrees); ellipse (radiusAlongMeters, radiusHeightMeters, optional startAngleDegrees/endAngleDegrees); " +
+            "star (outerRadiusMeters, points/tips, optional innerRadiusMeters); regularPolygon (radiusMeters, sides); " +
             "isoscelesTriangle/triangle (baseWidthMeters, heightMeters, optional pointUp); diamond/rhombus (widthAlongMeters, heightMeters); " +
-            "cross/plus (horizontalSpanMeters, verticalSpanMeters, armThicknessMeters); heart (scaleMeters, segments). " +
-            "For circles, ellipses, slots, rounded rectangles, capsules, squircles, or any other silhouette use \"boundary\" with explicit points. " +
+            "cross/plus (horizontalSpanMeters, verticalSpanMeters, armThicknessMeters); heart (scaleMeters — prefer >=0.35 m; plugin tessellates with adaptive chord length). " +
+            "For richer geometry, use \"segments\" (either root or inside \"boundary\") with ordered entries of kind line/arc/circle/ellipse and nested points start/end/mid/center in { alongMeters, heightFromWallBaseMeters }; the chain must close (last segment meets first). " +
+            "Two arc segments meeting at the sides form a lens (vesica), not an ellipse — for a true ellipse use shape.kind \"ellipse\" or one ellipse segment with full sweep. " +
+            "For a round hole use shape.kind \"circle\" (or segments kind circle) with radiusMeters — do NOT approximate circles with few boundary line segments (octagon). " +
+            "For an elliptical hole use shape.kind \"ellipse\" with radiusAlongMeters and radiusHeightMeters (not an octagon boundary). " +
+            "For slots, rounded rectangles, capsules, squircles, or any other silhouette use \"boundary\" with explicit points or segment chains. " +
             "For roman arch wall openings use create_wall_roman_arch_profile (not this op). " +
             "clampToWallShell default true. Replaces wall profile sketch; commits prior batch ops like create_wall_roman_arch_profile.\n" +
             "- flip_wall: elementIds (array) or elementId — flips wall facing.\n" +
