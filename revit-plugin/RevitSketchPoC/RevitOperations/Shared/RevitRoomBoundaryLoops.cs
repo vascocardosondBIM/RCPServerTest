@@ -11,14 +11,17 @@ namespace RevitSketchPoC.RevitOperations.Shared
     /// </summary>
     public static class RevitRoomBoundaryLoops
     {
-        /// <summary>Default: wall centre — good match for slab footprint vs location curves.</summary>
-        public static SpatialElementBoundaryLocation DefaultBoundaryLocation => SpatialElementBoundaryLocation.Center;
+        /// <summary>
+        /// Default: <see cref="SpatialElementBoundaryLocation.Finish"/> — room boundary at finish faces (inside the room),
+        /// not at the wall location line. Use <c>boundaryLocation: \"center\"</c> in JSON for centreline slabs.
+        /// </summary>
+        public static SpatialElementBoundaryLocation DefaultBoundaryLocation => SpatialElementBoundaryLocation.Finish;
 
         public static SpatialElementBoundaryLocation ParseBoundaryLocation(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
             {
-                return SpatialElementBoundaryLocation.Center;
+                return DefaultBoundaryLocation;
             }
 
             var s = raw.Trim().ToLowerInvariant().Replace(" ", string.Empty).Replace("_", string.Empty);
@@ -26,9 +29,11 @@ namespace RevitSketchPoC.RevitOperations.Shared
             {
                 "finish" => SpatialElementBoundaryLocation.Finish,
                 "finishwithoutcw" => SpatialElementBoundaryLocation.Finish,
+                "center" or "centre" or "wallcenter" or "wallcenterline" or "locationline" =>
+                    SpatialElementBoundaryLocation.Center,
                 "coreboundary" or "core" => SpatialElementBoundaryLocation.CoreBoundary,
                 "corecenter" => SpatialElementBoundaryLocation.CoreCenter,
-                _ => SpatialElementBoundaryLocation.Center
+                _ => DefaultBoundaryLocation
             };
         }
 

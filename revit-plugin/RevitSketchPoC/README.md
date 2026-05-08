@@ -88,7 +88,7 @@ Cada entrada do array é um objeto com `"op"` e campos específicos (metros em X
 | `create_wall_arc` | Parede curva: arco por três pontos ou por centro + raio + ângulos; opcionais como `create_wall`. |
 | `create_room` | Sala: centro ou `boundary` (polígono fechado); opcionais `name`, `levelName`. |
 | `create_door` / `create_window` | Porta/janela: `locationX/Y` ou `location`; opcionais `hostWallId`, `levelName`, tipo; há validação de proximidade em lote. |
-| **`create_floor_from_room`** | **Preferido para lajes por divisão:** `roomId` (ou `elementId` se for Room). Contorno = limite calculado da Room (arcos OK). Opcionais: `floorTypeName`, `name` (comentário), `boundaryLocation` (`center`, `finish`, `coreBoundary`, `coreCenter`). |
+| **`create_floor_from_room`** | **Preferido para lajes por divisão:** `roomId` (ou `elementId` se for Room). Contorno = limite calculado da Room (arcos OK). Opcionais: `floorTypeName`, `name` (comentário), `boundaryLocation`: **`finish` (por defeito — faces de acabamento / interior da divisão)**, `center` (eixo da parede), `coreBoundary`, `coreCenter`. |
 | **`create_ceiling_from_room`** | Igual ao anterior para tetos; `ceilingTypeName` opcional. |
 | `create_floor` / `create_ceiling` | **Alternativa** quando não há Room: `boundary` [{x,y}, …], **ou** `boundarySegments` (line/arc), **ou** `circle`; opcionais `levelName`, tipo, `name`. |
 | `analyze_floor_wall_footprint` | Leitura: piso vs cadeia de paredes; log **curto** por defeito; opcional `includeJson:true`; opcional `wallIds` (usar `footprintRepairHints` em níveis “cheios”). |

@@ -363,7 +363,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             var levelName = level?.Name;
             var zWork = level?.Elevation ?? 0.0;
             var boundaryLocationLabel = string.IsNullOrWhiteSpace(boundaryLocationRaw)
-                ? "center"
+                ? "finish"
                 : boundaryLocationRaw.Trim();
 
             var floorBoundary = DescribeFloorBoundary(floor);

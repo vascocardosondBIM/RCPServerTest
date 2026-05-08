@@ -229,7 +229,9 @@ namespace RevitSketchPoC.Chat.Services
                 ["repair_ceiling_to_room_footprint"] =
                     "Rebuilds the ceiling from the room boundary (same as create_ceiling_from_room). ceilingId + roomId; optional boundaryLocation.",
                 ["analyze_ceiling_wall_footprint"] =
-                    "Same Room-first pattern as floor analyze; optional roomId, boundaryLocation, wallIds; 3D view is fine."
+                    "Same Room-first pattern as floor analyze; optional roomId, boundaryLocation, wallIds; 3D view is fine.",
+                ["create_pillar"] =
+                    "Structural column: pillarTypeName from namedTypesForRevitOps; plan location in metres (model XY). Optional topLevelName or heightMeters."
             };
 
             if (view != null && view is not ViewPlan)
@@ -728,9 +730,17 @@ namespace RevitSketchPoC.Chat.Services
                 }
 
                 row["slabFromRoomRevitOp"] = "create_floor_from_room";
-                row["slabFromRoomPayload"] = new Dictionary<string, object?> { ["roomId"] = rm.Id.IntegerValue };
+                row["slabFromRoomPayload"] = new Dictionary<string, object?>
+                {
+                    ["roomId"] = rm.Id.IntegerValue,
+                    ["boundaryLocation"] = "finish"
+                };
                 row["ceilingFromRoomRevitOp"] = "create_ceiling_from_room";
-                row["ceilingFromRoomPayload"] = new Dictionary<string, object?> { ["roomId"] = rm.Id.IntegerValue };
+                row["ceilingFromRoomPayload"] = new Dictionary<string, object?>
+                {
+                    ["roomId"] = rm.Id.IntegerValue,
+                    ["boundaryLocation"] = "finish"
+                };
             }
 
             row["parameters"] = CollectParameters(doc, el, typeEl, maxParams);
