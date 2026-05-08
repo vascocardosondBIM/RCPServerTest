@@ -147,7 +147,7 @@ namespace RevitSketchPoC.Chat.Services
             return new Dictionary<string, object?>
             {
                 ["note"] =
-                    "Use suggestedWallIds in analyze_floor_wall_footprint / repair_floor_to_wall_footprint (and ceiling ops) when the level has many walls — passes exact boundary walls to the tool. IDs are heuristic (bbox overlap); verify with selection if needed.",
+                    "When a Room exists for the slab zone, analyze compares to the Room boundary first (optional roomId + boundaryLocation). Use suggestedWallIds for wall-chain fallback and for repair_floor_to_wall_footprint / repair_ceiling_to_wall_footprint on busy levels. IDs are heuristic (bbox overlap); verify with selection if needed.",
                 ["floors"] = floors,
                 ["ceilings"] = ceilings
             };
@@ -220,12 +220,16 @@ namespace RevitSketchPoC.Chat.Services
             {
                 ["repair_floor_to_wall_footprint"] =
                     "Uses wall location curves from the model (not the active view). If the level has many walls, pass wallIds — use footprintRepairHints.floors[].suggestedWallIds for the matching floorId when available.",
+                ["repair_floor_to_room_footprint"] =
+                    "Rebuilds the floor from Room.GetBoundarySegments (same as create_floor_from_room). Requires floorId + roomId on the same level; optional boundaryLocation.",
                 ["analyze_floor_wall_footprint"] =
-                    "Same as repair: optional wallIds from footprintRepairHints improve accuracy on busy levels. planGeometryInActiveView being omitted (3D view) does not block these ops.",
+                    "Room-first when a Room is associated: optional roomId + boundaryLocation (match create_floor_from_room). Otherwise wall-chain metrics. Optional wallIds from footprintRepairHints on busy levels. 3D view is fine.",
                 ["repair_ceiling_to_wall_footprint"] =
                     "Same pattern as floor repair; use footprintRepairHints.ceilings[].suggestedWallIds when helpful.",
+                ["repair_ceiling_to_room_footprint"] =
+                    "Rebuilds the ceiling from the room boundary (same as create_ceiling_from_room). ceilingId + roomId; optional boundaryLocation.",
                 ["analyze_ceiling_wall_footprint"] =
-                    "Optional wallIds from footprintRepairHints; 3D view is fine."
+                    "Same Room-first pattern as floor analyze; optional roomId, boundaryLocation, wallIds; 3D view is fine."
             };
 
             if (view != null && view is not ViewPlan)

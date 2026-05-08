@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Architecture;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RevitSketchPoC.Core.Geometry;
@@ -38,6 +39,9 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
 
             var tolM = op["toleranceMeters"]?.Value<double?>() ?? DefaultMismatchDistanceMeters;
             var areaTol = op["areaRatioTolerance"]?.Value<double?>() ?? DefaultAreaRatioTolerance;
+            var explicitRoomId = op["roomId"]?.Value<long?>();
+            var boundaryLocRaw = op["boundaryLocation"]?.ToString();
+            var roomBoundaryLocation = RevitRoomBoundaryLoops.ParseBoundaryLocation(boundaryLocRaw);
 
             foreach (var fid in floorIds)
             {
@@ -55,7 +59,16 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 var level = doc.GetElement(floor.LevelId) as Level;
                 var wallIds = ReadOptionalWallIds(op);
                 var walls = ResolveWallsForFloor(doc, floor, wallIds);
-                var report = BuildReport(doc, floor, level, walls, tolM, areaTol);
+                var report = BuildReport(
+                    doc,
+                    floor,
+                    level,
+                    walls,
+                    tolM,
+                    areaTol,
+                    explicitRoomId,
+                    roomBoundaryLocation,
+                    boundaryLocRaw);
                 log.AppendLine(BuildHumanAnalyzeSummary(report));
                 if (op["includeJson"]?.Value<bool?>() == true)
                 {
@@ -194,6 +207,97 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 " wallsUsed=" + walls.Count + " alignTo=" + align);
         }
 
+        /// <summary>
+        /// Rebuilds the floor from the placed room boundary (same geometry as <c>create_floor_from_room</c>).
+        /// </summary>
+        public static void RunRepairFloorToRoomFootprintJsonOp(Document doc, JObject op, StringBuilder log)
+        {
+            var floorIds = ReadFloorIds(op, 1);
+            if (floorIds.Count != 1)
+            {
+                throw new InvalidOperationException("repair_floor_to_room_footprint requires a single floorId.");
+            }
+
+            var floorId = floorIds[0];
+            if (doc.GetElement(floorId) is not Floor floor)
+            {
+                throw new InvalidOperationException("repair_floor_to_room_footprint: element is not a Floor.");
+            }
+
+            var roomIdLong = op["roomId"]?.Value<long?>()
+                             ?? throw new InvalidOperationException("repair_floor_to_room_footprint requires roomId.");
+            if (doc.GetElement(new ElementId((long)roomIdLong)) is not Room room)
+            {
+                throw new InvalidOperationException("repair_floor_to_room_footprint: element is not a Room.");
+            }
+
+            if (room.LevelId != floor.LevelId)
+            {
+                throw new InvalidOperationException(
+                    "repair_floor_to_room_footprint: Room and Floor must be on the same level.");
+            }
+
+            var level = doc.GetElement(floor.LevelId) as Level
+                        ?? throw new InvalidOperationException("Floor has no valid level.");
+
+            var z = level.Elevation;
+            var boundaryLoc = RevitRoomBoundaryLoops.ParseBoundaryLocation(op["boundaryLocation"]?.ToString());
+            var loops = RevitRoomBoundaryLoops.BuildCurveLoopsForSlab(room, z, boundaryLoc);
+            if (loops.Count == 0)
+            {
+                throw new InvalidOperationException("repair_floor_to_room_footprint: Room produced no boundary loops.");
+            }
+
+            var floorTypeId = floor.FloorType.Id;
+            var isStructural = floor.get_Parameter(BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL)?.AsInteger() == 1;
+            var offsetInternal = floor.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM)?.AsDouble() ?? 0.0;
+            var comment = floor.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
+            var oldId = floor.Id.IntegerValue;
+            Floor? created = null;
+            var subTx = new SubTransaction(doc);
+            subTx.Start();
+            try
+            {
+                doc.Delete(floorId);
+                created = Floor.Create(doc, loops, floorTypeId, level.Id);
+                subTx.Commit();
+            }
+            catch (Exception ex)
+            {
+                subTx.RollBack();
+                throw new InvalidOperationException(
+                    "repair_floor_to_room_footprint: Floor.Create failed (rollback applied, original floor preserved): " +
+                    ex.Message);
+            }
+
+            if (created == null)
+            {
+                throw new InvalidOperationException("repair_floor_to_room_footprint: Floor.Create returned null.");
+            }
+
+            try
+            {
+                if (isStructural)
+                {
+                    created.get_Parameter(BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL)?.Set(1);
+                }
+
+                created.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM)?.Set(offsetInternal);
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    created.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(comment);
+                }
+            }
+            catch
+            {
+                // optional parameter copy
+            }
+
+            log.AppendLine(
+                "repair_floor_to_room_footprint oldId=" + oldId + " newId=" + created.Id.IntegerValue +
+                " roomId=" + roomIdLong + " loops=" + loops.Count);
+        }
+
         private static List<ElementId> ReadFloorIds(JObject op, int max)
         {
             var fromArr = RevitOpsElementIdList.Read(op["floorIds"], max)
@@ -250,11 +354,17 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             Level? level,
             List<Wall> walls,
             double tolMeters,
-            double areaRatioTolerance)
+            double areaRatioTolerance,
+            long? explicitRoomId,
+            SpatialElementBoundaryLocation roomBoundaryLocation,
+            string? boundaryLocationRaw)
         {
             var floorId = floor.Id.IntegerValue;
             var levelName = level?.Name;
             var zWork = level?.Elevation ?? 0.0;
+            var boundaryLocationLabel = string.IsNullOrWhiteSpace(boundaryLocationRaw)
+                ? "center"
+                : boundaryLocationRaw.Trim();
 
             var floorBoundary = DescribeFloorBoundary(floor);
             var tolFt = RevitWallCreationOps.MetersToFeet(PlanGeometryRules.EndpointJoinToleranceMeters);
@@ -264,44 +374,115 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             var wallCurves = CollectWallLocationCurves(walls, zWork);
             var wallCurveChainClosed = TryBuildClosedCurveChain(wallCurves, tolFt, out _, out var chainClosed) && chainClosed;
 
-            double? areaRatio = null;
-            double? maxDist = null;
-            var mismatch = false;
+            var wallMismatch = false;
+            double? areaRatioWall = null;
+            double? maxDistWall = null;
 
-            if (floorBoundary.AreaSquareMeters is double aF &&
+            if (floorBoundary.AreaSquareMeters is double aFwall &&
                 wallFootprint.AreaSquareMeters is double aW &&
-                aF > 1e-6 && aW > 1e-6)
+                aFwall > 1e-6 && aW > 1e-6)
             {
-                areaRatio = aF / aW;
-                if (Math.Abs(1.0 - areaRatio.Value) > areaRatioTolerance)
+                areaRatioWall = aFwall / aW;
+                if (Math.Abs(1.0 - areaRatioWall.Value) > areaRatioTolerance)
                 {
-                    mismatch = true;
+                    wallMismatch = true;
                 }
             }
 
-            if (floorBoundary.TessellatedBoundaryMeters is { Count: >= 3 } tess &&
+            if (floorBoundary.TessellatedBoundaryMeters is { Count: >= 3 } tessW &&
                 wallFootprint.ClosedLoop == true &&
                 wallFootprint.VerticesMeters is { Count: >= 3 } wVerts)
             {
-                var tessPts = tess.Select(p => (X: p.X, Y: p.Y)).ToList();
+                var tessPts = tessW.Select(p => (X: p.X, Y: p.Y)).ToList();
                 var wPts = wVerts.Select(p => (X: p.X, Y: p.Y)).ToList();
-                maxDist = MaxDistancePolygonToSegments(tessPts, wPts);
-                if (maxDist.Value > tolMeters)
+                maxDistWall = MaxDistancePolygonToSegments(tessPts, wPts);
+                if (maxDistWall.Value > tolMeters)
                 {
-                    mismatch = true;
+                    wallMismatch = true;
                 }
             }
             else if (floorBoundary.ArcLengthRatio is double ar && ar > 0.55 && wallFootprint.StraightSegmentCount > 0 &&
                      wallFootprint.ArcHeavy == false)
             {
-                mismatch = true;
+                wallMismatch = true;
             }
 
-            // If we cannot close the wall chain, analysis confidence is low and this is often exactly the broken-floor case.
             if (walls.Count >= 3 && (!wallCurveChainClosed || wallFootprint.ClosedLoop != true))
             {
-                mismatch = true;
+                wallMismatch = true;
             }
+
+            IReadOnlyList<(double X, double Y)>? outline = floorBoundary.TessellatedBoundaryMeters is { Count: >= 3 } ob
+                ? ob.Select(p => (p.X, p.Y)).ToList()
+                : null;
+            var associatedRoom = RevitRoomBoundaryLoops.TryAssociateRoomForSlabOnLevel(
+                doc,
+                floor.LevelId,
+                explicitRoomId,
+                outline);
+
+            JObject? roomFootprintJO = null;
+            double? areaRatioFloorToRoom = null;
+            double? maxDistFloorToRoom = null;
+            var roomMismatch = false;
+            var roomReferenceReady = false;
+
+            if (associatedRoom != null)
+            {
+                if (RevitRoomBoundaryLoops.TryTessellatePrimaryRoomBoundaryMeters(
+                        associatedRoom,
+                        zWork,
+                        roomBoundaryLocation,
+                        MaxTessellationPointsPerCurve,
+                        out var roomTess,
+                        out var roomAreaM2,
+                        out var roomErr))
+                {
+                    roomReferenceReady = true;
+                    roomFootprintJO = new JObject
+                    {
+                        ["roomId"] = associatedRoom.Id.IntegerValue,
+                        ["roomName"] = associatedRoom.Name ?? string.Empty,
+                        ["roomNumber"] = associatedRoom.Number ?? string.Empty,
+                        ["areaSquareMeters"] = roomAreaM2 != null ? JToken.FromObject(roomAreaM2.Value) : JValue.CreateNull(),
+                        ["tessPointCount"] = roomTess.Count,
+                        ["boundaryOk"] = true
+                    };
+
+                    if (floorBoundary.AreaSquareMeters is double aFroom && roomAreaM2 is double aR && aR > 1e-6)
+                    {
+                        areaRatioFloorToRoom = aFroom / aR;
+                        if (Math.Abs(1.0 - areaRatioFloorToRoom.Value) > areaRatioTolerance)
+                        {
+                            roomMismatch = true;
+                        }
+                    }
+
+                    if (floorBoundary.TessellatedBoundaryMeters is { Count: >= 3 } ftess)
+                    {
+                        var fpts = ftess.Select(p => (X: p.X, Y: p.Y)).ToList();
+                        maxDistFloorToRoom = MaxDistancePolygonToSegments(fpts, roomTess);
+                        if (maxDistFloorToRoom.Value > tolMeters)
+                        {
+                            roomMismatch = true;
+                        }
+                    }
+                }
+                else
+                {
+                    roomFootprintJO = new JObject
+                    {
+                        ["roomId"] = associatedRoom.Id.IntegerValue,
+                        ["roomName"] = associatedRoom.Name ?? string.Empty,
+                        ["roomNumber"] = associatedRoom.Number ?? string.Empty,
+                        ["boundaryOk"] = false,
+                        ["error"] = roomErr ?? "tessellation failed"
+                    };
+                }
+            }
+
+            var comparisonReference = roomReferenceReady ? "room" : "wall_chain";
+            var likelyMismatch = roomReferenceReady ? roomMismatch : wallMismatch;
 
             var result = new JObject
             {
@@ -312,24 +493,52 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 ["wallFootprint"] = JObject.FromObject(wallFootprint),
                 ["metrics"] = new JObject
                 {
-                    ["areaRatio"] = areaRatio != null ? JToken.FromObject(areaRatio.Value) : JValue.CreateNull(),
-                    ["maxDistanceFloorToWallChainMeters"] = maxDist != null ? JToken.FromObject(maxDist.Value) : JValue.CreateNull(),
+                    ["comparisonReference"] = comparisonReference,
+                    ["boundaryLocation"] = boundaryLocationLabel,
+                    ["areaRatio"] = areaRatioWall != null ? JToken.FromObject(areaRatioWall.Value) : JValue.CreateNull(),
+                    ["areaRatioFloorToRoom"] = areaRatioFloorToRoom != null
+                        ? JToken.FromObject(areaRatioFloorToRoom.Value)
+                        : JValue.CreateNull(),
+                    ["maxDistanceFloorToWallChainMeters"] = maxDistWall != null
+                        ? JToken.FromObject(maxDistWall.Value)
+                        : JValue.CreateNull(),
+                    ["maxDistanceFloorToRoomBoundaryMeters"] = maxDistFloorToRoom != null
+                        ? JToken.FromObject(maxDistFloorToRoom.Value)
+                        : JValue.CreateNull(),
                     ["wallCurveChainClosed"] = wallCurveChainClosed,
-                    ["likelyMismatch"] = mismatch,
+                    ["likelyMismatch"] = likelyMismatch,
                     ["toleranceMeters"] = tolMeters,
                     ["areaRatioTolerance"] = areaRatioTolerance
                 }
             };
 
-            if (mismatch)
+            if (roomFootprintJO != null)
             {
-                result["suggestedRepair"] = new JObject
+                result["roomFootprint"] = roomFootprintJO;
+            }
+
+            if (likelyMismatch)
+            {
+                if (comparisonReference == "room" && associatedRoom != null)
                 {
-                    ["op"] = "repair_floor_to_wall_footprint",
-                    ["floorId"] = floorId,
-                    ["wallIds"] = new JArray(walls.Select(w => w.Id.IntegerValue)),
-                    ["alignTo"] = "wall_centerline"
-                };
+                    result["suggestedRepair"] = new JObject
+                    {
+                        ["op"] = "repair_floor_to_room_footprint",
+                        ["floorId"] = floorId,
+                        ["roomId"] = associatedRoom.Id.IntegerValue,
+                        ["boundaryLocation"] = boundaryLocationLabel
+                    };
+                }
+                else
+                {
+                    result["suggestedRepair"] = new JObject
+                    {
+                        ["op"] = "repair_floor_to_wall_footprint",
+                        ["floorId"] = floorId,
+                        ["wallIds"] = new JArray(walls.Select(w => w.Id.IntegerValue)),
+                        ["alignTo"] = "wall_centerline"
+                    };
+                }
             }
             else
             {
@@ -1130,17 +1339,27 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             var closed = report["wallFootprint"]?["ClosedLoop"]?.ToString() ?? "null";
             var mismatch = report["metrics"]?["likelyMismatch"]?.Value<bool?>() ?? false;
             var chainClosed = report["metrics"]?["wallCurveChainClosed"]?.ToString() ?? "null";
-            var maxDist = report["metrics"]?["maxDistanceFloorToWallChainMeters"]?.Value<double?>();
-            var areaRatio = report["metrics"]?["areaRatio"]?.Value<double?>();
-            var maxDistText = maxDist.HasValue ? maxDist.Value.ToString("0.###") + "m" : "n/a";
-            var areaText = areaRatio.HasValue ? areaRatio.Value.ToString("0.###") : "n/a";
+            var refMode = report["metrics"]?["comparisonReference"]?.ToString() ?? "?";
+            var roomId = report["roomFootprint"]?["roomId"]?.Value<long?>();
+            var maxDistWall = report["metrics"]?["maxDistanceFloorToWallChainMeters"]?.Value<double?>();
+            var maxDistRoom = report["metrics"]?["maxDistanceFloorToRoomBoundaryMeters"]?.Value<double?>();
+            var areaRatioWall = report["metrics"]?["areaRatio"]?.Value<double?>();
+            var areaRatioRoom = report["metrics"]?["areaRatioFloorToRoom"]?.Value<double?>();
+            var maxWallText = maxDistWall.HasValue ? maxDistWall.Value.ToString("0.###") + "m" : "n/a";
+            var maxRoomText = maxDistRoom.HasValue ? maxDistRoom.Value.ToString("0.###") + "m" : "n/a";
+            var areaWallText = areaRatioWall.HasValue ? areaRatioWall.Value.ToString("0.###") : "n/a";
+            var areaRoomText = areaRatioRoom.HasValue ? areaRatioRoom.Value.ToString("0.###") : "n/a";
             return "analyze_floor_wall_footprint_result floorId=" + floorId +
                    " level=\"" + level + "\"" +
+                   " ref=" + refMode +
+                   (roomId.HasValue ? " roomId=" + roomId.Value : string.Empty) +
                    " walls=" + walls +
                    " closedLoop=" + closed +
                    " wallCurveChainClosed=" + chainClosed +
-                   " areaRatio=" + areaText +
-                   " maxDist=" + maxDistText +
+                   " areaRatioFloorToWall=" + areaWallText +
+                   " areaRatioFloorToRoom=" + areaRoomText +
+                   " maxDistToWall=" + maxWallText +
+                   " maxDistToRoom=" + maxRoomText +
                    " likelyMismatch=" + mismatch;
         }
 

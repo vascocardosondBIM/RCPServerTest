@@ -149,12 +149,20 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                 RevitFloorWallFootprintOps.RunRepairFloorToWallFootprintJsonOp(doc, opObj, log);
                                 ok++;
                                 break;
+                            case "repair_floor_to_room_footprint":
+                                RevitFloorWallFootprintOps.RunRepairFloorToRoomFootprintJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
                             case "analyze_ceiling_wall_footprint":
                                 RevitCeilingWallFootprintOps.RunAnalyzeCeilingWallFootprintJsonOp(doc, opObj, log);
                                 ok++;
                                 break;
                             case "repair_ceiling_to_wall_footprint":
                                 RevitCeilingWallFootprintOps.RunRepairCeilingToWallFootprintJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
+                            case "repair_ceiling_to_room_footprint":
+                                RevitCeilingWallFootprintOps.RunRepairCeilingToRoomFootprintJsonOp(doc, opObj, log);
                                 ok++;
                                 break;
                             case "create_ceiling":

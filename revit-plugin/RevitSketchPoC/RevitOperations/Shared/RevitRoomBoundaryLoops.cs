@@ -33,6 +33,104 @@ namespace RevitSketchPoC.RevitOperations.Shared
         }
 
         /// <summary>
+        /// For footprint analyze/repair: use <paramref name="explicitRoomId"/> when it is a placed <see cref="Room"/> on <paramref name="levelId"/>,
+        /// otherwise pick the largest room on that level whose location point lies inside the slab outline (metres XY).
+        /// </summary>
+        public static Room? TryAssociateRoomForSlabOnLevel(
+            Document doc,
+            ElementId levelId,
+            long? explicitRoomId,
+            IReadOnlyList<(double X, double Y)>? slabOutlineMeters)
+        {
+            if (explicitRoomId != null)
+            {
+                if (doc.GetElement(new ElementId((long)explicitRoomId)) is Room r &&
+                    r.LevelId == levelId &&
+                    r.Area > 1e-9)
+                {
+                    return r;
+                }
+            }
+
+            if (slabOutlineMeters == null || slabOutlineMeters.Count < 3)
+            {
+                return null;
+            }
+
+            Room? best = null;
+            var bestArea = 0.0;
+            foreach (var el in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_Rooms)
+                         .WhereElementIsNotElementType())
+            {
+                if (el is not Room room || room.LevelId != levelId || room.Area <= 1e-9)
+                {
+                    continue;
+                }
+
+                if (!TryRoomLocationPointMeters(room, out var cx, out var cy))
+                {
+                    continue;
+                }
+
+                if (!PointInPolygon2D(slabOutlineMeters, cx, cy))
+                {
+                    continue;
+                }
+
+                if (room.Area > bestArea)
+                {
+                    bestArea = room.Area;
+                    best = room;
+                }
+            }
+
+            return best;
+        }
+
+        private static bool TryRoomLocationPointMeters(Room room, out double x, out double y)
+        {
+            x = y = 0;
+            if (room.Location is not LocationPoint lp)
+            {
+                return false;
+            }
+
+            var p = lp.Point;
+            x = UnitUtils.ConvertFromInternalUnits(p.X, UnitTypeId.Meters);
+            y = UnitUtils.ConvertFromInternalUnits(p.Y, UnitTypeId.Meters);
+            return true;
+        }
+
+        private static bool PointInPolygon2D(IReadOnlyList<(double X, double Y)> poly, double x, double y)
+        {
+            var inside = false;
+            var n = poly.Count;
+            for (var i = 0; i < n; i++)
+            {
+                var j = (i + 1) % n;
+                var pi = poly[i];
+                var pj = poly[j];
+                if ((pi.Y > y) != (pj.Y > y))
+                {
+                    var denom = pj.Y - pi.Y;
+                    if (Math.Abs(denom) < 1e-15)
+                    {
+                        continue;
+                    }
+
+                    var xInt = (pj.X - pi.X) * (y - pi.Y) / denom + pi.X;
+                    if (x < xInt)
+                    {
+                        inside = !inside;
+                    }
+                }
+            }
+
+            return inside;
+        }
+
+        /// <summary>
         /// Outer loop first (largest plan area), then remaining loops (openings / islands) in arbitrary order.
         /// </summary>
         public static List<CurveLoop> BuildCurveLoopsForSlab(
@@ -115,6 +213,105 @@ namespace RevitSketchPoC.RevitOperations.Shared
             loops.Sort((a, b) => Math.Abs(PlanLoopAreaInternal(a)).CompareTo(Math.Abs(PlanLoopAreaInternal(b))));
             loops.Reverse();
             return loops;
+        }
+
+        /// <summary>
+        /// Read-only tessellation of the primary (largest) room loop in plan metres — for footprint compare / analyze.
+        /// </summary>
+        public static bool TryTessellatePrimaryRoomBoundaryMeters(
+            Room room,
+            double zElevation,
+            SpatialElementBoundaryLocation location,
+            int maxPointsPerCurve,
+            out List<(double X, double Y)> boundaryMeters,
+            out double? areaSquareMeters,
+            out string? errorMessage)
+        {
+            boundaryMeters = new List<(double X, double Y)>();
+            areaSquareMeters = null;
+            errorMessage = null;
+            try
+            {
+                var loops = BuildCurveLoopsForSlab(room, zElevation, location);
+                if (loops.Count == 0)
+                {
+                    errorMessage = "no boundary loops";
+                    return false;
+                }
+
+                boundaryMeters = TessellateCurveLoopToMetersXY(loops[0], maxPointsPerCurve);
+                if (boundaryMeters.Count < 3)
+                {
+                    errorMessage = "boundary tessellation too small";
+                    return false;
+                }
+
+                areaSquareMeters = Math.Abs(SignedArea2DMeters(boundaryMeters));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+        }
+
+        private static List<(double X, double Y)> TessellateCurveLoopToMetersXY(CurveLoop loop, int maxPerCurve)
+        {
+            var pts = new List<(double X, double Y)>();
+            foreach (var curve in loop)
+            {
+                IList<XYZ> t;
+                try
+                {
+                    t = curve.Tessellate();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (t == null || t.Count == 0)
+                {
+                    continue;
+                }
+
+                var step = Math.Max(1, (t.Count - 1) / Math.Max(1, maxPerCurve));
+                for (var i = 0; i < t.Count; i += step)
+                {
+                    var p = t[i];
+                    var xm = UnitUtils.ConvertFromInternalUnits(p.X, UnitTypeId.Meters);
+                    var ym = UnitUtils.ConvertFromInternalUnits(p.Y, UnitTypeId.Meters);
+                    if (pts.Count == 0 ||
+                        (pts[pts.Count - 1].X - xm) * (pts[pts.Count - 1].X - xm) +
+                        (pts[pts.Count - 1].Y - ym) * (pts[pts.Count - 1].Y - ym) > 1e-12)
+                    {
+                        pts.Add((xm, ym));
+                    }
+                }
+            }
+
+            if (pts.Count >= 2 &&
+                (pts[0].X - pts[pts.Count - 1].X) * (pts[0].X - pts[pts.Count - 1].X) +
+                (pts[0].Y - pts[pts.Count - 1].Y) * (pts[0].Y - pts[pts.Count - 1].Y) < 1e-12)
+            {
+                pts.RemoveAt(pts.Count - 1);
+            }
+
+            return pts;
+        }
+
+        private static double SignedArea2DMeters(List<(double X, double Y)> poly)
+        {
+            double s = 0;
+            var n = poly.Count;
+            for (var i = 0; i < n; i++)
+            {
+                var j = (i + 1) % n;
+                s += poly[i].X * poly[j].Y - poly[j].X * poly[i].Y;
+            }
+
+            return s * 0.5;
         }
 
         private static IEnumerable<Curve> FlattenCurveToPlanZ(Curve c, double z)
