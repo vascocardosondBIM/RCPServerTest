@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using System;
@@ -17,6 +18,10 @@ namespace RevitSketchPoC.Chat.Services
         private const int MaxGeometryDoors = 100;
         private const int MaxGeometryWindows = 100;
         private const int MaxGeometryRooms = 50;
+        private const int MaxFootprintHintFloors = 24;
+        private const int MaxFootprintHintCeilings = 24;
+        private const int MaxSuggestedWallIdsPerSlab = 48;
+        private const double FootprintHintBboxPadMeters = 0.75;
 
         private static readonly BuiltInCategory[] CountCategories =
         {
@@ -90,8 +95,146 @@ namespace RevitSketchPoC.Chat.Services
 
             payload["planGeometryInActiveView"] = TryBuildPlanGeometryInActiveView(uidoc);
             payload["namedTypesForRevitOps"] = BuildNamedTypesForRevitOps(doc);
+            payload["footprintRepairHints"] = BuildFootprintRepairHints(doc);
+            payload["revitOpsContextHints"] = BuildRevitOpsContextHints(view);
 
             return JsonConvert.SerializeObject(payload, Formatting.Indented);
+        }
+
+        /// <summary>
+        /// Per-slab suggested <c>wallIds</c> for <c>analyze_*</c> / <c>repair_*</c> when a level has many walls
+        /// (avoids bad chains from interior partitions). Geometry comes from the model DB, not the active view.
+        /// </summary>
+        private static Dictionary<string, object?> BuildFootprintRepairHints(Document doc)
+        {
+            var pad = UnitUtils.ConvertToInternalUnits(FootprintHintBboxPadMeters, UnitTypeId.Meters);
+            var floors = new List<Dictionary<string, object?>>();
+            foreach (var floor in new FilteredElementCollector(doc).OfClass(typeof(Floor)).Cast<Floor>())
+            {
+                if (floors.Count >= MaxFootprintHintFloors)
+                {
+                    break;
+                }
+
+                var hint = BuildOneSlabWallHint(doc, floor.LevelId, floor.get_BoundingBox(null), pad);
+                if (hint == null)
+                {
+                    continue;
+                }
+
+                hint["floorId"] = floor.Id.IntegerValue;
+                floors.Add(hint);
+            }
+
+            var ceilings = new List<Dictionary<string, object?>>();
+            foreach (var ceiling in new FilteredElementCollector(doc).OfClass(typeof(Ceiling)).Cast<Ceiling>())
+            {
+                if (ceilings.Count >= MaxFootprintHintCeilings)
+                {
+                    break;
+                }
+
+                var hint = BuildOneSlabWallHint(doc, ceiling.LevelId, ceiling.get_BoundingBox(null), pad);
+                if (hint == null)
+                {
+                    continue;
+                }
+
+                hint["ceilingId"] = ceiling.Id.IntegerValue;
+                ceilings.Add(hint);
+            }
+
+            return new Dictionary<string, object?>
+            {
+                ["note"] =
+                    "Use suggestedWallIds in analyze_floor_wall_footprint / repair_floor_to_wall_footprint (and ceiling ops) when the level has many walls — passes exact boundary walls to the tool. IDs are heuristic (bbox overlap); verify with selection if needed.",
+                ["floors"] = floors,
+                ["ceilings"] = ceilings
+            };
+        }
+
+        private static Dictionary<string, object?>? BuildOneSlabWallHint(
+            Document doc,
+            ElementId levelId,
+            BoundingBoxXYZ? bb,
+            double padInternal)
+        {
+            if (bb == null || levelId == ElementId.InvalidElementId)
+            {
+                return null;
+            }
+
+            var lvl = doc.GetElement(levelId) as Level;
+            var levelName = lvl?.Name;
+            var mn = new XYZ(bb.Min.X - padInternal, bb.Min.Y - padInternal, bb.Min.Z - padInternal);
+            var mx = new XYZ(bb.Max.X + padInternal, bb.Max.Y + padInternal, bb.Max.Z + padInternal);
+            Outline outline;
+            try
+            {
+                outline = new Outline(mn, mx);
+            }
+            catch
+            {
+                return null;
+            }
+
+            ICollection<ElementId> wallIdColl;
+            try
+            {
+                var bf = new BoundingBoxIntersectsFilter(outline);
+                wallIdColl = new FilteredElementCollector(doc)
+                    .OfClass(typeof(Wall))
+                    .WherePasses(bf)
+                    .ToElementIds();
+            }
+            catch
+            {
+                return null;
+            }
+
+            var suggested = new List<long>();
+            foreach (var wid in wallIdColl)
+            {
+                if (doc.GetElement(wid) is not Wall w || w.LevelId != levelId)
+                {
+                    continue;
+                }
+
+                suggested.Add(w.Id.IntegerValue);
+                if (suggested.Count >= MaxSuggestedWallIdsPerSlab)
+                {
+                    break;
+                }
+            }
+
+            return new Dictionary<string, object?>
+            {
+                ["levelName"] = levelName,
+                ["suggestedWallIds"] = suggested
+            };
+        }
+
+        private static Dictionary<string, string> BuildRevitOpsContextHints(View? view)
+        {
+            var hints = new Dictionary<string, string>
+            {
+                ["repair_floor_to_wall_footprint"] =
+                    "Uses wall location curves from the model (not the active view). If the level has many walls, pass wallIds — use footprintRepairHints.floors[].suggestedWallIds for the matching floorId when available.",
+                ["analyze_floor_wall_footprint"] =
+                    "Same as repair: optional wallIds from footprintRepairHints improve accuracy on busy levels. planGeometryInActiveView being omitted (3D view) does not block these ops.",
+                ["repair_ceiling_to_wall_footprint"] =
+                    "Same pattern as floor repair; use footprintRepairHints.ceilings[].suggestedWallIds when helpful.",
+                ["analyze_ceiling_wall_footprint"] =
+                    "Optional wallIds from footprintRepairHints; 3D view is fine."
+            };
+
+            if (view != null && view is not ViewPlan)
+            {
+                hints["activeView"] =
+                    "Active view is not a floor plan — planGeometryInActiveView may be omitted. Slab footprint repair/analyze still work; prefer footprintRepairHints + element ids from selection.";
+            }
+
+            return hints;
         }
 
         /// <summary>Type names the LLM should use in revitOps (walls, floors, doors, windows, generic families).</summary>
@@ -462,12 +605,47 @@ namespace RevitSketchPoC.Chat.Services
                 n++;
             }
 
+            var floorIds = new List<long>();
+            var ceilingIds = new List<long>();
+            var roomIds = new List<long>();
+            foreach (var id in ids)
+            {
+                var el = doc.GetElement(id);
+                if (el is Floor f)
+                {
+                    floorIds.Add(f.Id.IntegerValue);
+                }
+                else if (el is Ceiling c)
+                {
+                    ceilingIds.Add(c.Id.IntegerValue);
+                }
+                else if (el is Room r)
+                {
+                    roomIds.Add(r.Id.IntegerValue);
+                }
+            }
+
             var payload = new Dictionary<string, object?>
             {
                 ["totalSelected"] = total,
                 ["elementsReturned"] = elements.Count,
                 ["elements"] = elements
             };
+
+            if (floorIds.Count > 0)
+            {
+                payload["floorIdsInSelection"] = floorIds;
+            }
+
+            if (ceilingIds.Count > 0)
+            {
+                payload["ceilingIdsInSelection"] = ceilingIds;
+            }
+
+            if (roomIds.Count > 0)
+            {
+                payload["roomIdsInSelection"] = roomIds;
+            }
 
             if (total > elements.Count)
             {
@@ -518,6 +696,37 @@ namespace RevitSketchPoC.Chat.Services
                 {
                     row["length"] = FormatLength(doc, lc.Curve.Length);
                 }
+            }
+            else if (el is Room rm)
+            {
+                if (rm.LevelId != ElementId.InvalidElementId)
+                {
+                    var lvl = doc.GetElement(rm.LevelId) as Level;
+                    row["level"] = lvl?.Name;
+                }
+
+                try
+                {
+                    row["number"] = rm.Number;
+                }
+                catch
+                {
+                    row["number"] = rm.get_Parameter(BuiltInParameter.ROOM_NUMBER)?.AsString();
+                }
+
+                try
+                {
+                    row["areaSquareMeters"] = RoundM(UnitUtils.ConvertFromInternalUnits(rm.Area, UnitTypeId.SquareMeters));
+                }
+                catch
+                {
+                    // unplaced / no area
+                }
+
+                row["slabFromRoomRevitOp"] = "create_floor_from_room";
+                row["slabFromRoomPayload"] = new Dictionary<string, object?> { ["roomId"] = rm.Id.IntegerValue };
+                row["ceilingFromRoomRevitOp"] = "create_ceiling_from_room";
+                row["ceilingFromRoomPayload"] = new Dictionary<string, object?> { ["roomId"] = rm.Id.IntegerValue };
             }
 
             row["parameters"] = CollectParameters(doc, el, typeEl, maxParams);

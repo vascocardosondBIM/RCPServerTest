@@ -107,7 +107,7 @@ Fluxo resumido:
 2. O plugin chama o LLM (**Ollama**, **Gemini** ou **NVIDIA** conforme `LlmProvider` e restantes campos em `pluginsettings.json`; o servidor MCP Node não escolhe o modelo).
 3. Resposta estruturada → criação de elementos numa `Transaction` no Revit.
 
-**Assistente IA (chat no Revit)** — mesmo add-in: conversa com contexto do projeto (JSON + geometria em planta), imagens opcionais, e aplicação automática de alterações quando o modelo devolve `revitOps` (paredes, pisos, portas, parâmetros, perfis de arco, etc.). Documentação completa na secção **«Assistente IA (chat)»** do ficheiro [`revit-plugin/RevitSketchPoC/README.md`](revit-plugin/RevitSketchPoC/README.md).
+**Assistente IA (chat no Revit)** — mesmo add-in: conversa com contexto do projeto (JSON: tipos, `footprintRepairHints`, geometria em planta quando a vista é 2D, ids de seleção com **Rooms** para pisos/tetos), imagens opcionais, e `revitOps` no modelo. **Pisos/tetos por defeito** via `create_floor_from_room` / `create_ceiling_from_room` quando existe divisão (Room); geometria manual só em fallback. Documentação: [`revit-plugin/RevitSketchPoC/README.md`](revit-plugin/RevitSketchPoC/README.md) (secção *Assistente IA* e *Pisos e tetos*).
 
 ## Licença
 

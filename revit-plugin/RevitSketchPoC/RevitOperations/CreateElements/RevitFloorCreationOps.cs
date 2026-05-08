@@ -1,9 +1,10 @@
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Architecture;
 using Newtonsoft.Json.Linq;
+using RevitSketchPoC.RevitOperations.Shared;
 using RevitSketchPoC.Sketch.Contracts;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -53,7 +54,14 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
 
                 try
                 {
-                    if (TryCreateFloor(doc, level, floorType, f.Boundary, out _))
+                    var loop = RevitOpJsonGeometry.TryBuildCurveLoop(level, f.Boundary);
+                    if (loop == null)
+                    {
+                        continue;
+                    }
+
+                    var floor = Floor.Create(doc, new List<CurveLoop> { loop }, floorType.Id, level.Id);
+                    if (floor != null)
                     {
                         created++;
                     }
@@ -73,31 +81,20 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             var level = RevitWallCreationOps.ResolveLevel(doc, string.IsNullOrWhiteSpace(levelName) ? null : levelName);
             var floorTypeName = op["floorTypeName"]?.ToString();
             var floorType = ResolveFloorType(doc, string.IsNullOrWhiteSpace(floorTypeName) ? null : floorTypeName);
-
-            JArray? boundaryArr = op["boundary"] as JArray;
-            if (boundaryArr == null || boundaryArr.Count < 3)
+            var loop = RevitOpJsonGeometry.TryBuildCurveLoop(level, op, out var loopError);
+            if (loop == null)
             {
-                throw new InvalidOperationException(
-                    "create_floor requires \"boundary\" as array of at least 3 points {x,y} in metres.");
+                throw new InvalidOperationException("create_floor: " + loopError);
             }
 
-            var pts = new List<Point2D>();
-            foreach (var t in boundaryArr)
+            Floor? floor;
+            try
             {
-                if (t is JObject jo && TryReadPlanPoint(jo, out var x, out var y))
-                {
-                    pts.Add(new Point2D { X = x, Y = y });
-                }
+                floor = Floor.Create(doc, new List<CurveLoop> { loop }, floorType.Id, level.Id);
             }
-
-            if (pts.Count < 3)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException("create_floor: could not read boundary points.");
-            }
-
-            if (!TryCreateFloor(doc, level, floorType, pts, out var floor))
-            {
-                throw new InvalidOperationException("create_floor: Revit could not create floor from boundary (open or degenerate loop?).");
+                throw new InvalidOperationException("create_floor: " + ex.Message);
             }
 
             var label = op["name"]?.ToString();
@@ -117,73 +114,64 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             log.AppendLine("create_floor id=" + (floor?.Id.ToString() ?? "?"));
         }
 
-        private static bool TryCreateFloor(
-            Document doc,
-            Level level,
-            FloorType floorType,
-            IReadOnlyList<Point2D> boundary,
-            out Floor? floor)
+        /// <summary>JSON <c>create_floor_from_room</c> — slab from a placed room's computed boundary (works for curved walls / circular rooms).</summary>
+        public static void RunCreateFloorFromRoomJsonOp(Document doc, JObject op, StringBuilder log)
         {
-            floor = null;
-            var elev = level.Elevation;
-            var curves = new List<Curve>();
-            var n = boundary.Count;
-            for (var i = 0; i < n; i++)
+            var roomId = op["roomId"]?.Value<long?>() ?? op["elementId"]?.Value<long?>();
+            if (roomId == null)
             {
-                var a = boundary[i];
-                var b = boundary[(i + 1) % n];
-                var p0 = new XYZ(RevitWallCreationOps.MetersToFeet(a.X), RevitWallCreationOps.MetersToFeet(a.Y), elev);
-                var p1 = new XYZ(RevitWallCreationOps.MetersToFeet(b.X), RevitWallCreationOps.MetersToFeet(b.Y), elev);
-                var len = p0.DistanceTo(p1);
-                if (len < RevitWallCreationOps.MetersToFeet(0.05))
-                {
-                    continue;
-                }
-
-                curves.Add(Line.CreateBound(p0, p1));
+                throw new InvalidOperationException("create_floor_from_room requires roomId (or elementId for a Room).");
             }
 
-            if (curves.Count < 3)
+            if (doc.GetElement(new ElementId((long)roomId)) is not Room room)
             {
-                return false;
+                throw new InvalidOperationException("create_floor_from_room: element is not a Room.");
             }
 
-            var loop = CurveLoop.Create(curves);
-            var loops = new List<CurveLoop> { loop };
+            var level = doc.GetElement(room.LevelId) as Level
+                        ?? throw new InvalidOperationException("create_floor_from_room: room has no valid level.");
+
+            var z = level.Elevation;
+            var boundaryLoc = RevitRoomBoundaryLoops.ParseBoundaryLocation(op["boundaryLocation"]?.ToString());
+
+            var loops = RevitRoomBoundaryLoops.BuildCurveLoopsForSlab(room, z, boundaryLoc);
+            var floorTypeName = op["floorTypeName"]?.ToString();
+            var floorType = ResolveFloorType(doc, string.IsNullOrWhiteSpace(floorTypeName) ? null : floorTypeName);
+
+            Floor? floor;
             try
             {
                 floor = Floor.Create(doc, loops, floorType.Id, level.Id);
-                return floor != null;
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                throw new InvalidOperationException("create_floor_from_room: " + ex.Message);
             }
-        }
 
-        private static bool TryReadPlanPoint(JObject o, out double x, out double y)
-        {
-            x = y = 0;
-            return TryReadNumber(o["x"], out x) && TryReadNumber(o["y"], out y);
-        }
-
-        private static bool TryReadNumber(JToken? token, out double value)
-        {
-            value = 0;
-            if (token == null || token.Type == JTokenType.Null)
+            if (floor == null)
             {
-                return false;
+                throw new InvalidOperationException("create_floor_from_room: Revit returned null.");
             }
 
-            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            var label = op["name"]?.ToString();
+            if (string.IsNullOrWhiteSpace(label))
             {
-                value = token.Value<double>();
-                return true;
+                label = string.IsNullOrWhiteSpace(room.Name) ? null : room.Name.Trim();
             }
 
-            var s = token.ToString().Trim();
-            return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
-                   double.TryParse(s, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                try
+                {
+                    floor.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(label);
+                }
+                catch
+                {
+                    // optional
+                }
+            }
+
+            log.AppendLine("create_floor_from_room id=" + floor.Id + " roomId=" + roomId);
         }
     }
 }

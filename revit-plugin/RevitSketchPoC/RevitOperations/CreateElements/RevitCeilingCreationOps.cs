@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Architecture;
 using Newtonsoft.Json.Linq;
 using RevitSketchPoC.RevitOperations.Shared;
 using System;
@@ -42,18 +43,10 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             var typeName = op["ceilingTypeName"]?.ToString();
             var ceilingType = ResolveCeilingType(doc, string.IsNullOrWhiteSpace(typeName) ? null : typeName);
 
-            var boundaryArr = op["boundary"] as JArray;
-            var pts = RevitOpJsonGeometry.ReadPlanBoundaryMeters(boundaryArr, 3);
-            if (pts.Count < 3)
-            {
-                throw new InvalidOperationException(
-                    "create_ceiling requires \"boundary\" as array of at least 3 points {x,y} in metres.");
-            }
-
-            var loop = RevitOpJsonGeometry.TryBuildCurveLoop(level, pts);
+            var loop = RevitOpJsonGeometry.TryBuildCurveLoop(level, op, out var loopError);
             if (loop == null)
             {
-                throw new InvalidOperationException("create_ceiling: invalid boundary loop.");
+                throw new InvalidOperationException("create_ceiling: " + loopError);
             }
 
             Ceiling? ceiling;
@@ -85,6 +78,65 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             }
 
             log.AppendLine("create_ceiling id=" + ceiling.Id);
+        }
+
+        /// <summary>JSON <c>create_ceiling_from_room</c> — ceiling from a placed room's boundary (same geometry as floor-from-room).</summary>
+        public static void RunCreateCeilingFromRoomJsonOp(Document doc, JObject op, StringBuilder log)
+        {
+            var roomId = op["roomId"]?.Value<long?>() ?? op["elementId"]?.Value<long?>();
+            if (roomId == null)
+            {
+                throw new InvalidOperationException("create_ceiling_from_room requires roomId (or elementId for a Room).");
+            }
+
+            if (doc.GetElement(new ElementId((long)roomId)) is not Room room)
+            {
+                throw new InvalidOperationException("create_ceiling_from_room: element is not a Room.");
+            }
+
+            var level = doc.GetElement(room.LevelId) as Level
+                        ?? throw new InvalidOperationException("create_ceiling_from_room: room has no valid level.");
+
+            var z = level.Elevation;
+            var boundaryLoc = RevitRoomBoundaryLoops.ParseBoundaryLocation(op["boundaryLocation"]?.ToString());
+            var loops = RevitRoomBoundaryLoops.BuildCurveLoopsForSlab(room, z, boundaryLoc);
+            var typeName = op["ceilingTypeName"]?.ToString();
+            var ceilingType = ResolveCeilingType(doc, string.IsNullOrWhiteSpace(typeName) ? null : typeName);
+
+            Ceiling? ceiling;
+            try
+            {
+                ceiling = Ceiling.Create(doc, loops, ceilingType.Id, level.Id);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("create_ceiling_from_room: " + ex.Message);
+            }
+
+            if (ceiling == null)
+            {
+                throw new InvalidOperationException("create_ceiling_from_room: Revit returned null.");
+            }
+
+            var label = op["name"]?.ToString();
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                label = string.IsNullOrWhiteSpace(room.Name) ? null : room.Name.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                try
+                {
+                    ceiling.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(label);
+                }
+                catch
+                {
+                    // optional
+                }
+            }
+
+            log.AppendLine("create_ceiling_from_room id=" + ceiling.Id + " roomId=" + roomId);
         }
     }
 }

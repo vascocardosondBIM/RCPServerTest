@@ -12,10 +12,10 @@ using System.Text;
 namespace RevitSketchPoC.RevitOperations.ReviewElements
 {
     /// <summary>
-    /// Review / repair: detects slab outlines that disagree with a ring of walls (e.g. smooth circle vs faceted wall polygon)
-    /// and can rebuild the floor from a closed chain of wall location curves.
+    /// Review / repair for ceilings against wall footprint on the same level.
+    /// Mirrors floor checks and reconstruction behavior.
     /// </summary>
-    public static class RevitFloorWallFootprintOps
+    public static class RevitCeilingWallFootprintOps
     {
         private const double DefaultMismatchDistanceMeters = 0.08;
         private const double DefaultAreaRatioTolerance = 0.06;
@@ -24,38 +24,35 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
         /// <summary>Keep in sync with MaxIdsPerOp on the JSON ops executor (duplicated to avoid project reference cycles).</summary>
         private const int MaxElementIdsPerOp = 50;
 
-        /// <summary>
-        /// Emits one JSON line per floor: metrics, flags, and suggested repair op payload (read-only).
-        /// </summary>
-        public static void RunAnalyzeFloorWallFootprintJsonOp(Document doc, JObject op, StringBuilder log)
+        public static void RunAnalyzeCeilingWallFootprintJsonOp(Document doc, JObject op, StringBuilder log)
         {
-            var floorIds = ReadFloorIds(op, MaxElementIdsPerOp);
-            if (floorIds.Count == 0)
+            var ceilingIds = ReadCeilingIds(op, MaxElementIdsPerOp);
+            if (ceilingIds.Count == 0)
             {
                 throw new InvalidOperationException(
-                    "analyze_floor_wall_footprint requires floorId (integer) or floorIds (array).");
+                    "analyze_ceiling_wall_footprint requires ceilingId (integer) or ceilingIds (array).");
             }
 
             var tolM = op["toleranceMeters"]?.Value<double?>() ?? DefaultMismatchDistanceMeters;
             var areaTol = op["areaRatioTolerance"]?.Value<double?>() ?? DefaultAreaRatioTolerance;
 
-            foreach (var fid in floorIds)
+            foreach (var cid in ceilingIds)
             {
-                if (doc.GetElement(fid) is not Floor floor)
+                if (doc.GetElement(cid) is not Ceiling ceiling)
                 {
                     log.AppendLine(JsonConvert.SerializeObject(new
                     {
-                        op = "analyze_floor_wall_footprint_result",
-                        floorId = fid.IntegerValue,
-                        error = "not_a_floor"
+                        op = "analyze_ceiling_wall_footprint_result",
+                        ceilingId = cid.IntegerValue,
+                        error = "not_a_ceiling"
                     }));
                     continue;
                 }
 
-                var level = doc.GetElement(floor.LevelId) as Level;
+                var level = doc.GetElement(ceiling.LevelId) as Level;
                 var wallIds = ReadOptionalWallIds(op);
-                var walls = ResolveWallsForFloor(doc, floor, wallIds);
-                var report = BuildReport(doc, floor, level, walls, tolM, areaTol);
+                var walls = ResolveWallsForLevel(doc, ceiling.LevelId, wallIds);
+                var report = BuildReport(ceiling, level, walls, tolM, areaTol);
                 log.AppendLine(BuildHumanAnalyzeSummary(report));
                 if (op["includeJson"]?.Value<bool?>() == true)
                 {
@@ -64,39 +61,36 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             }
         }
 
-        /// <summary>
-        /// Deletes the floor and recreates it with a boundary derived from wall location curves on the same level.
-        /// </summary>
-        public static void RunRepairFloorToWallFootprintJsonOp(Document doc, JObject op, StringBuilder log)
+        public static void RunRepairCeilingToWallFootprintJsonOp(Document doc, JObject op, StringBuilder log)
         {
-            var floorIds = ReadFloorIds(op, 1);
-            if (floorIds.Count != 1)
+            var ceilingIds = ReadCeilingIds(op, 1);
+            if (ceilingIds.Count != 1)
             {
-                throw new InvalidOperationException("repair_floor_to_wall_footprint requires a single floorId.");
+                throw new InvalidOperationException("repair_ceiling_to_wall_footprint requires a single ceilingId.");
             }
 
-            var floorId = floorIds[0];
-            if (doc.GetElement(floorId) is not Floor floor)
+            var ceilingId = ceilingIds[0];
+            if (doc.GetElement(ceilingId) is not Ceiling ceiling)
             {
-                throw new InvalidOperationException("repair_floor_to_wall_footprint: element is not a Floor.");
+                throw new InvalidOperationException("repair_ceiling_to_wall_footprint: element is not a Ceiling.");
             }
 
             var align = (op["alignTo"]?.ToString() ?? "wall_centerline").Trim().ToLowerInvariant();
             if (align is not ("wall_centerline" or "wall_inside" or "wall_outside"))
             {
                 throw new InvalidOperationException(
-                    "repair_floor_to_wall_footprint: alignTo must be wall_centerline, wall_inside, or wall_outside.");
+                    "repair_ceiling_to_wall_footprint: alignTo must be wall_centerline, wall_inside, or wall_outside.");
             }
 
-            var level = doc.GetElement(floor.LevelId) as Level
-                        ?? throw new InvalidOperationException("Floor has no valid level.");
+            var level = doc.GetElement(ceiling.LevelId) as Level
+                        ?? throw new InvalidOperationException("Ceiling has no valid level.");
 
             var wallIds = ReadOptionalWallIds(op);
-            var walls = ResolveWallsForFloor(doc, floor, wallIds);
+            var walls = ResolveWallsForLevel(doc, ceiling.LevelId, wallIds);
             if (walls.Count < 3)
             {
                 throw new InvalidOperationException(
-                    "repair_floor_to_wall_footprint: need at least 3 walls on the floor level (or pass wallIds).");
+                    "repair_ceiling_to_wall_footprint: need at least 3 walls on the ceiling level (or pass wallIds).");
             }
 
             var tolFt = RevitWallCreationOps.MetersToFeet(PlanGeometryRules.EndpointJoinToleranceMeters);
@@ -105,24 +99,23 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             if (!TryBuildClosedCurveChain(wallCurves, tolFt, out var orderedWallCurves, out var closed))
             {
                 throw new InvalidOperationException(
-                    "repair_floor_to_wall_footprint: could not build a single closed loop from wall location curves.");
+                    "repair_ceiling_to_wall_footprint: could not build a single closed loop from wall location curves.");
             }
 
             if (!closed)
             {
                 throw new InvalidOperationException(
-                    "repair_floor_to_wall_footprint: wall chain is not closed within join tolerance.");
+                    "repair_ceiling_to_wall_footprint: wall chain is not closed within join tolerance.");
             }
 
             var profileCurves = orderedWallCurves.ToList();
-
             if (align is "wall_inside" or "wall_outside")
             {
                 var rawSegs = CollectWallSegments(walls, z);
                 if (!TryBuildClosedPolygon(rawSegs, tolFt, out var loopMeters, out _))
                 {
                     throw new InvalidOperationException(
-                        "repair_floor_to_wall_footprint: could not offset wall chain for alignTo mode.");
+                        "repair_ceiling_to_wall_footprint: could not offset wall chain for alignTo mode.");
                 }
 
                 var vertsInternal = loopMeters
@@ -133,7 +126,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 vertsInternal = OffsetPolygonInPlan(vertsInternal, d);
                 if (vertsInternal.Count < 3)
                 {
-                    throw new InvalidOperationException("repair_floor_to_wall_footprint: offset produced degenerate boundary.");
+                    throw new InvalidOperationException("repair_ceiling_to_wall_footprint: offset produced degenerate boundary.");
                 }
 
                 profileCurves = PolylineToCurves(vertsInternal, tolFt * 0.5).Cast<Curve>().ToList();
@@ -142,43 +135,37 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             var newLoop = RevitOpJsonGeometry.TryCreateCurveLoopFromCurves(profileCurves, tolFt * 0.5);
             if (newLoop == null)
             {
-                throw new InvalidOperationException("repair_floor_to_wall_footprint: boundary has too few edges after cleanup.");
+                throw new InvalidOperationException("repair_ceiling_to_wall_footprint: boundary has too few edges after cleanup.");
             }
 
-            var floorTypeId = floor.FloorType.Id;
-            var isStructural = floor.get_Parameter(BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL)?.AsInteger() == 1;
-            var offsetInternal = floor.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM)?.AsDouble() ?? 0.0;
-            var comment = floor.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
-            var oldId = floor.Id.IntegerValue;
-            Floor? created = null;
+            var oldId = ceiling.Id.IntegerValue;
+            var typeId = ceiling.GetTypeId();
+            var offsetInternal = ceiling.get_Parameter(BuiltInParameter.CEILING_HEIGHTABOVELEVEL_PARAM)?.AsDouble() ?? 0.0;
+            var comment = ceiling.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
+            Ceiling? created = null;
             var subTx = new SubTransaction(doc);
             subTx.Start();
             try
             {
-                doc.Delete(floorId);
-                created = Floor.Create(doc, new List<CurveLoop> { newLoop }, floorTypeId, level.Id);
+                doc.Delete(ceilingId);
+                created = Ceiling.Create(doc, new List<CurveLoop> { newLoop }, typeId, level.Id);
                 subTx.Commit();
             }
             catch (Exception ex)
             {
                 subTx.RollBack();
                 throw new InvalidOperationException(
-                    "repair_floor_to_wall_footprint: Floor.Create failed (rollback applied, original floor preserved): " + ex.Message);
+                    "repair_ceiling_to_wall_footprint: Ceiling.Create failed (rollback applied, original ceiling preserved): " + ex.Message);
             }
 
             if (created == null)
             {
-                throw new InvalidOperationException("repair_floor_to_wall_footprint: Floor.Create returned null.");
+                throw new InvalidOperationException("repair_ceiling_to_wall_footprint: Ceiling.Create returned null.");
             }
 
             try
             {
-                if (isStructural)
-                {
-                    created.get_Parameter(BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL)?.Set(1);
-                }
-
-                created.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM)?.Set(offsetInternal);
+                created.get_Parameter(BuiltInParameter.CEILING_HEIGHTABOVELEVEL_PARAM)?.Set(offsetInternal);
                 if (!string.IsNullOrWhiteSpace(comment))
                 {
                     created.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(comment);
@@ -186,17 +173,17 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             }
             catch
             {
-                // optional parameter copy
+                // Optional parameter copy.
             }
 
             log.AppendLine(
-                "repair_floor_to_wall_footprint oldId=" + oldId + " newId=" + created.Id.IntegerValue +
+                "repair_ceiling_to_wall_footprint oldId=" + oldId + " newId=" + created.Id.IntegerValue +
                 " wallsUsed=" + walls.Count + " alignTo=" + align);
         }
 
-        private static List<ElementId> ReadFloorIds(JObject op, int max)
+        private static List<ElementId> ReadCeilingIds(JObject op, int max)
         {
-            var fromArr = RevitOpsElementIdList.Read(op["floorIds"], max)
+            var fromArr = RevitOpsElementIdList.Read(op["ceilingIds"], max)
                 .Concat(RevitOpsElementIdList.Read(op["elementIds"], max))
                 .ToList();
             if (fromArr.Count > 0)
@@ -204,7 +191,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 return fromArr.Distinct().Take(max).ToList();
             }
 
-            var single = op["floorId"]?.Value<long?>() ?? op["elementId"]?.Value<long?>();
+            var single = op["ceilingId"]?.Value<long?>() ?? op["elementId"]?.Value<long?>();
             if (single != null)
             {
                 return new List<ElementId> { new ElementId((long)single) };
@@ -219,14 +206,14 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             return ids.Count > 0 ? ids : null;
         }
 
-        private static List<Wall> ResolveWallsForFloor(Document doc, Floor floor, List<ElementId>? wallIds)
+        private static List<Wall> ResolveWallsForLevel(Document doc, ElementId levelId, List<ElementId>? wallIds)
         {
             if (wallIds != null && wallIds.Count > 0)
             {
                 var list = new List<Wall>();
                 foreach (var id in wallIds)
                 {
-                    if (doc.GetElement(id) is Wall w && w.LevelId == floor.LevelId)
+                    if (doc.GetElement(id) is Wall w && w.LevelId == levelId)
                     {
                         list.Add(w);
                     }
@@ -238,25 +225,43 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             var levelWalls = new FilteredElementCollector(doc)
                 .OfClass(typeof(Wall))
                 .Cast<Wall>()
-                .Where(w => w.LevelId == floor.LevelId)
+                .Where(w => w.LevelId == levelId)
                 .ToList();
 
-            return FilterWallsNearFloorBoundary(levelWalls, floor);
+            var ceilingsOnLevel = new FilteredElementCollector(doc)
+                .OfClass(typeof(Ceiling))
+                .Cast<Ceiling>()
+                .Where(c => c.LevelId == levelId)
+                .ToList();
+
+            if (ceilingsOnLevel.Count == 0)
+            {
+                return levelWalls;
+            }
+
+            var primary = ceilingsOnLevel
+                .OrderByDescending(c => Math.Abs(EstimateCeilingArea(c)))
+                .FirstOrDefault();
+            if (primary == null)
+            {
+                return levelWalls;
+            }
+
+            return FilterWallsNearCeilingBoundary(levelWalls, primary);
         }
 
         private static JObject BuildReport(
-            Document doc,
-            Floor floor,
+            Ceiling ceiling,
             Level? level,
             List<Wall> walls,
             double tolMeters,
             double areaRatioTolerance)
         {
-            var floorId = floor.Id.IntegerValue;
+            var ceilingId = ceiling.Id.IntegerValue;
             var levelName = level?.Name;
             var zWork = level?.Elevation ?? 0.0;
 
-            var floorBoundary = DescribeFloorBoundary(floor);
+            var boundary = DescribeCeilingBoundary(ceiling);
             var tolFt = RevitWallCreationOps.MetersToFeet(PlanGeometryRules.EndpointJoinToleranceMeters);
             var rawSegs = CollectWallSegments(walls, zWork);
             var wallFootprint = DescribeWallFootprint(rawSegs, tolFt);
@@ -268,18 +273,18 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             double? maxDist = null;
             var mismatch = false;
 
-            if (floorBoundary.AreaSquareMeters is double aF &&
+            if (boundary.AreaSquareMeters is double aC &&
                 wallFootprint.AreaSquareMeters is double aW &&
-                aF > 1e-6 && aW > 1e-6)
+                aC > 1e-6 && aW > 1e-6)
             {
-                areaRatio = aF / aW;
+                areaRatio = aC / aW;
                 if (Math.Abs(1.0 - areaRatio.Value) > areaRatioTolerance)
                 {
                     mismatch = true;
                 }
             }
 
-            if (floorBoundary.TessellatedBoundaryMeters is { Count: >= 3 } tess &&
+            if (boundary.TessellatedBoundaryMeters is { Count: >= 3 } tess &&
                 wallFootprint.ClosedLoop == true &&
                 wallFootprint.VerticesMeters is { Count: >= 3 } wVerts)
             {
@@ -291,13 +296,12 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                     mismatch = true;
                 }
             }
-            else if (floorBoundary.ArcLengthRatio is double ar && ar > 0.55 && wallFootprint.StraightSegmentCount > 0 &&
+            else if (boundary.ArcLengthRatio is double ar && ar > 0.55 && wallFootprint.StraightSegmentCount > 0 &&
                      wallFootprint.ArcHeavy == false)
             {
                 mismatch = true;
             }
 
-            // If we cannot close the wall chain, analysis confidence is low and this is often exactly the broken-floor case.
             if (walls.Count >= 3 && (!wallCurveChainClosed || wallFootprint.ClosedLoop != true))
             {
                 mismatch = true;
@@ -305,15 +309,15 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
 
             var result = new JObject
             {
-                ["op"] = "analyze_floor_wall_footprint_result",
-                ["floorId"] = floorId,
+                ["op"] = "analyze_ceiling_wall_footprint_result",
+                ["ceilingId"] = ceilingId,
                 ["levelName"] = levelName,
-                ["floorBoundary"] = JObject.FromObject(floorBoundary),
+                ["ceilingBoundary"] = JObject.FromObject(boundary),
                 ["wallFootprint"] = JObject.FromObject(wallFootprint),
                 ["metrics"] = new JObject
                 {
                     ["areaRatio"] = areaRatio != null ? JToken.FromObject(areaRatio.Value) : JValue.CreateNull(),
-                    ["maxDistanceFloorToWallChainMeters"] = maxDist != null ? JToken.FromObject(maxDist.Value) : JValue.CreateNull(),
+                    ["maxDistanceCeilingToWallChainMeters"] = maxDist != null ? JToken.FromObject(maxDist.Value) : JValue.CreateNull(),
                     ["wallCurveChainClosed"] = wallCurveChainClosed,
                     ["likelyMismatch"] = mismatch,
                     ["toleranceMeters"] = tolMeters,
@@ -325,8 +329,8 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             {
                 result["suggestedRepair"] = new JObject
                 {
-                    ["op"] = "repair_floor_to_wall_footprint",
-                    ["floorId"] = floorId,
+                    ["op"] = "repair_ceiling_to_wall_footprint",
+                    ["ceilingId"] = ceilingId,
                     ["wallIds"] = new JArray(walls.Select(w => w.Id.IntegerValue)),
                     ["alignTo"] = "wall_centerline"
                 };
@@ -339,7 +343,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             return result;
         }
 
-        private sealed class FloorBoundaryInfo
+        private sealed class BoundaryInfo
         {
             public double? AreaSquareMeters { get; set; }
             public int TessellatedPointCount { get; set; }
@@ -367,10 +371,10 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             public double Y { get; set; }
         }
 
-        private static FloorBoundaryInfo DescribeFloorBoundary(Floor floor)
+        private static BoundaryInfo DescribeCeilingBoundary(Ceiling ceiling)
         {
-            var info = new FloorBoundaryInfo();
-            if (!TryGetPrimaryFootprintLoop(floor, out var loop, out var arcLenRatio) || loop == null)
+            var info = new BoundaryInfo();
+            if (!TryGetPrimaryFootprintLoop(ceiling, out var loop, out var arcLenRatio) || loop == null)
             {
                 return info;
             }
@@ -902,15 +906,15 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             return Math.Sqrt(dX * dX + dY * dY);
         }
 
-        private static bool TryGetPrimaryFootprintLoop(Floor floor, out EdgeArray? outerLoop, out double arcLengthRatio)
+        private static bool TryGetPrimaryFootprintLoop(Ceiling ceiling, out EdgeArray? outerLoop, out double arcLengthRatio)
         {
             outerLoop = null;
             arcLengthRatio = 0;
-            Options opt = new Options { DetailLevel = ViewDetailLevel.Fine };
+            var opt = new Options { DetailLevel = ViewDetailLevel.Fine };
             GeometryElement? ge;
             try
             {
-                ge = floor.get_Geometry(opt);
+                ge = ceiling.get_Geometry(opt);
             }
             catch
             {
@@ -923,7 +927,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
             }
 
             PlanarFace? bestFace = null;
-            double bestZ = double.MaxValue;
+            double bestZ = double.MinValue;
             foreach (GeometryObject go in ge)
             {
                 if (go is not Solid sol || sol.Volume <= 0)
@@ -945,7 +949,7 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                     }
 
                     var z = pf.Origin.Z;
-                    if (z < bestZ)
+                    if (z > bestZ)
                     {
                         bestZ = z;
                         bestFace = pf;
@@ -1041,14 +1045,24 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
                 .ToList();
         }
 
-        private static List<Wall> FilterWallsNearFloorBoundary(List<Wall> walls, Floor floor)
+        private static double EstimateCeilingArea(Ceiling ceiling)
+        {
+            if (!TryGetPrimaryFootprintLoop(ceiling, out var loop, out _) || loop == null)
+            {
+                return 0.0;
+            }
+
+            return Math.Abs(LoopAreaInternal(loop));
+        }
+
+        private static List<Wall> FilterWallsNearCeilingBoundary(List<Wall> walls, Ceiling ceiling)
         {
             if (walls.Count <= 12)
             {
                 return walls;
             }
 
-            if (!TryGetPrimaryFootprintLoop(floor, out var loop, out _) || loop == null)
+            if (!TryGetPrimaryFootprintLoop(ceiling, out var loop, out _) || loop == null)
             {
                 return walls;
             }
@@ -1124,17 +1138,17 @@ namespace RevitSketchPoC.RevitOperations.ReviewElements
 
         private static string BuildHumanAnalyzeSummary(JObject report)
         {
-            var floorId = report["floorId"]?.Value<int?>() ?? -1;
+            var ceilingId = report["ceilingId"]?.Value<int?>() ?? -1;
             var level = report["levelName"]?.ToString() ?? "?";
             var walls = report["wallFootprint"]?["WallCount"]?.Value<int?>() ?? 0;
             var closed = report["wallFootprint"]?["ClosedLoop"]?.ToString() ?? "null";
             var mismatch = report["metrics"]?["likelyMismatch"]?.Value<bool?>() ?? false;
             var chainClosed = report["metrics"]?["wallCurveChainClosed"]?.ToString() ?? "null";
-            var maxDist = report["metrics"]?["maxDistanceFloorToWallChainMeters"]?.Value<double?>();
+            var maxDist = report["metrics"]?["maxDistanceCeilingToWallChainMeters"]?.Value<double?>();
             var areaRatio = report["metrics"]?["areaRatio"]?.Value<double?>();
             var maxDistText = maxDist.HasValue ? maxDist.Value.ToString("0.###") + "m" : "n/a";
             var areaText = areaRatio.HasValue ? areaRatio.Value.ToString("0.###") : "n/a";
-            return "analyze_floor_wall_footprint_result floorId=" + floorId +
+            return "analyze_ceiling_wall_footprint_result ceilingId=" + ceilingId +
                    " level=\"" + level + "\"" +
                    " walls=" + walls +
                    " closedLoop=" + closed +
