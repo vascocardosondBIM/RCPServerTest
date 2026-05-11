@@ -230,6 +230,12 @@ namespace RevitSketchPoC.Chat.Services
                     "Rebuilds the ceiling from the room boundary (same as create_ceiling_from_room). ceilingId + roomId; optional boundaryLocation.",
                 ["analyze_ceiling_wall_footprint"] =
                     "Same Room-first pattern as floor analyze; optional roomId, boundaryLocation, wallIds; 3D view is fine.",
+                ["create_ceiling_from_room"] =
+                    "After boundary: sets Height Offset From Level using walls near the room + inserts. Default ceilingKind false_ceiling (teto falso) with queda from falseCeilingDropMeters or plugin DefaultFalseCeilingDropMeters (~0.30 m). Use ceilingKind slab_painted (laje pintada) for flush to wall top. Never places the ceiling through openings — clamped above door/window/opening bbox.",
+                ["create_ceiling"] =
+                    "Same vertical rules as create_ceiling_from_room; optional ceilingKind, falseCeilingDropMeters.",
+                ["change_ceiling_kind"] =
+                    "Recompute ceiling height: ceilingId (or elementId), ceilingKind false_ceiling|slab_painted (aliases: teto_falso, laje), optional falseCeilingDropMeters.",
                 ["create_pillar"] =
                     "Structural column: pillarTypeName from namedTypesForRevitOps; plan location in metres (model XY). Optional topLevelName or heightMeters."
             };
@@ -739,7 +745,8 @@ namespace RevitSketchPoC.Chat.Services
                 row["ceilingFromRoomPayload"] = new Dictionary<string, object?>
                 {
                     ["roomId"] = rm.Id.IntegerValue,
-                    ["boundaryLocation"] = "finish"
+                    ["boundaryLocation"] = "finish",
+                    ["ceilingKind"] = "false_ceiling"
                 };
             }
 

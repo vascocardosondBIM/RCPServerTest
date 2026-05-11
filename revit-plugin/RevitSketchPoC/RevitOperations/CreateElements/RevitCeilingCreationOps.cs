@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Newtonsoft.Json.Linq;
+using RevitSketchPoC.Core.Configuration;
 using RevitSketchPoC.RevitOperations.Shared;
 using System;
 using System.Collections.Generic;
@@ -36,8 +37,13 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             return types[0];
         }
 
-        public static void RunCreateCeilingJsonOp(Document doc, JObject op, StringBuilder log)
+        public static void RunCreateCeilingJsonOp(
+            Document doc,
+            JObject op,
+            StringBuilder log,
+            PluginSettings? pluginSettings = null)
         {
+            var settings = pluginSettings ?? new PluginSettings();
             var levelName = op["levelName"]?.ToString();
             var level = RevitWallCreationOps.ResolveLevel(doc, string.IsNullOrWhiteSpace(levelName) ? null : levelName);
             var typeName = op["ceilingTypeName"]?.ToString();
@@ -77,12 +83,22 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 }
             }
 
+            var kind = RevitCeilingVerticalPlacement.ParseKind(op);
+            var drop = RevitCeilingVerticalPlacement.ReadFalseCeilingDropMeters(op, settings);
+            var wallsHint = RevitCeilingVerticalPlacement.CollectWallsNearCurveLoop(doc, level.Id, loop, level.Elevation);
+            RevitCeilingVerticalPlacement.ApplyAfterCreate(doc, ceiling, level, wallsHint, kind, drop, log);
+
             log.AppendLine("create_ceiling id=" + ceiling.Id);
         }
 
         /// <summary>JSON <c>create_ceiling_from_room</c> — ceiling from a placed room's boundary (same geometry as floor-from-room).</summary>
-        public static void RunCreateCeilingFromRoomJsonOp(Document doc, JObject op, StringBuilder log)
+        public static void RunCreateCeilingFromRoomJsonOp(
+            Document doc,
+            JObject op,
+            StringBuilder log,
+            PluginSettings? pluginSettings = null)
         {
+            var settings = pluginSettings ?? new PluginSettings();
             var roomId = op["roomId"]?.Value<long?>() ?? op["elementId"]?.Value<long?>();
             if (roomId == null)
             {
@@ -136,7 +152,32 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 }
             }
 
+            var kind = RevitCeilingVerticalPlacement.ParseKind(op);
+            var drop = RevitCeilingVerticalPlacement.ReadFalseCeilingDropMeters(op, settings);
+            var wallsHint = CollectWallsHintForRoomLoops(doc, level, loops);
+            RevitCeilingVerticalPlacement.ApplyAfterCreate(doc, ceiling, level, wallsHint, kind, drop, log);
+
             log.AppendLine("create_ceiling_from_room id=" + ceiling.Id + " roomId=" + roomId);
+        }
+
+        private static List<Wall> CollectWallsHintForRoomLoops(Document doc, Level level, List<CurveLoop> loops)
+        {
+            var map = new Dictionary<int, Wall>();
+            var z = level.Elevation;
+            foreach (var loop in loops)
+            {
+                foreach (var w in RevitCeilingVerticalPlacement.CollectWallsNearCurveLoop(doc, level.Id, loop, z))
+                {
+                    map[w.Id.IntegerValue] = w;
+                }
+            }
+
+            if (map.Count > 0)
+            {
+                return map.Values.ToList();
+            }
+
+            return new List<Wall>();
         }
     }
 }

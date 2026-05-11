@@ -25,6 +25,9 @@ namespace RevitSketchPoC.Core.Configuration
         /// <summary>Full chat-completions URL; vazio = <c>https://integrate.api.nvidia.com/v1/chat/completions</c>.</summary>
         public string NvidiaChatCompletionsUrl { get; set; } = string.Empty;
         public double DefaultWallHeightMeters { get; set; } = 3.0;
+
+        /// <summary>Default vertical drop (m) for false ceilings when JSON omits <c>falseCeilingDropMeters</c>.</summary>
+        public double DefaultFalseCeilingDropMeters { get; set; } = 0.30;
     }
 
     public static class PluginSettingsLoader

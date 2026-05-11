@@ -166,11 +166,15 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                 ok++;
                                 break;
                             case "create_ceiling":
-                                RevitCeilingCreationOps.RunCreateCeilingJsonOp(doc, opObj, log);
+                                RevitCeilingCreationOps.RunCreateCeilingJsonOp(doc, opObj, log, settings);
                                 ok++;
                                 break;
                             case "create_ceiling_from_room":
-                                RevitCeilingCreationOps.RunCreateCeilingFromRoomJsonOp(doc, opObj, log);
+                                RevitCeilingCreationOps.RunCreateCeilingFromRoomJsonOp(doc, opObj, log, settings);
+                                ok++;
+                                break;
+                            case "change_ceiling_kind":
+                                RevitCeilingKindOps.RunChangeCeilingKindJsonOp(doc, opObj, settings, log);
                                 ok++;
                                 break;
                             case "create_wall_opening":
