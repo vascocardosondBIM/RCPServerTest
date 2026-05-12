@@ -48,10 +48,6 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                     {
                         op = "create_stairs";
                     }
-                    else if (string.Equals(op, "create ramp", StringComparison.OrdinalIgnoreCase))
-                    {
-                        op = "create_ramp";
-                    }
 
                     if (string.IsNullOrEmpty(op))
                     {
@@ -68,8 +64,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
 
                     if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal) ||
                         string.Equals(op, "create_wall_custom_profile_void", StringComparison.Ordinal) ||
-                        string.Equals(op, "create_stairs", StringComparison.Ordinal) ||
-                        string.Equals(op, "create_ramp", StringComparison.Ordinal))
+                        string.Equals(op, "create_stairs", StringComparison.Ordinal))
                     {
                         try
                         {
@@ -91,11 +86,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                             }
                             else if (string.Equals(op, "create_stairs", StringComparison.Ordinal))
                             {
-                                RevitStairsRampCreationOps.RunCreateStairsJsonOp(doc, opObj, log);
-                            }
-                            else
-                            {
-                                RevitStairsRampCreationOps.RunCreateRampJsonOp(doc, opObj, log);
+                                RevitStairsCreationOps.RunCreateStairsJsonOp(doc, opObj, log);
                             }
 
                             ok++;

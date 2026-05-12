@@ -3,29 +3,14 @@ using Autodesk.Revit.DB.Architecture;
 using Newtonsoft.Json.Linq;
 using RevitSketchPoC.RevitOperations.Shared;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
 namespace RevitSketchPoC.RevitOperations.CreateElements
 {
-    /// <summary>JSON <c>create_ramp</c> and <c>create_stairs</c> for chat revitOps.</summary>
-    public static class RevitStairsRampCreationOps
+    /// <summary>JSON <c>create_stairs</c> for chat revitOps.</summary>
+    public static class RevitStairsCreationOps
     {
-        /// <summary>Ramp system types (for context JSON only — Revit 2025 exposes no public create API for OST_Ramps).</summary>
-        public static IReadOnlyList<string> ListRampTypeNames(Document doc, int max = 36)
-        {
-            return new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_Ramps)
-                .WhereElementIsElementType()
-                .Cast<ElementType>()
-                .Select(t => t.Name)
-                .Where(n => !string.IsNullOrWhiteSpace(n))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(max)
-                .ToList();
-        }
-
         public static StairsType ResolveStairsType(Document doc, string? requestedName)
         {
             var types = new FilteredElementCollector(doc)
@@ -51,20 +36,6 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
         }
 
         /// <summary>
-        /// Same geometry as stairs: straight run between levels. Prefers a stair type whose name suggests a ramp
-        /// (Revit has no supported public API here to instantiate native OST_Ramps elements).
-        /// </summary>
-        public static void RunCreateRampJsonOp(Document doc, JObject op, StringBuilder log)
-        {
-            RunCreateStraightStairRunJsonOp(
-                doc,
-                op,
-                log,
-                "create_ramp",
-                preferRampLikeStairsType: true);
-        }
-
-        /// <summary>
         /// Straight run between bottomLevelName and topLevelName; path (startX,startY)-(endX,endY) in metres on bottom level.
         /// </summary>
         public static void RunCreateStairsJsonOp(Document doc, JObject op, StringBuilder log)
@@ -73,16 +44,14 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 doc,
                 op,
                 log,
-                "create_stairs",
-                preferRampLikeStairsType: false);
+                "create_stairs");
         }
 
         private static void RunCreateStraightStairRunJsonOp(
             Document doc,
             JObject op,
             StringBuilder log,
-            string opLabel,
-            bool preferRampLikeStairsType)
+            string opLabel)
         {
             var bottomName = op["bottomLevelName"]?.ToString() ?? op["baseLevelName"]?.ToString();
             var topName = op["topLevelName"]?.ToString();
@@ -114,7 +83,7 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 throw new InvalidOperationException(opLabel + ": path length is too small.");
             }
 
-            var stairsType = ResolveStairsTypeForOp(doc, op, opLabel, preferRampLikeStairsType, log);
+            var stairsType = ResolveStairsType(doc, op["stairsTypeName"]?.ToString());
             var justification = ReadStairsRunJustification(op);
 
             // StairsEditScope.Start must run with NO active Transaction (API remarks). After Start, open a
@@ -176,52 +145,6 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             }
 
             log.AppendLine(opLabel + " id=" + stairsId.IntegerValue + " (stairs component)");
-        }
-
-        private static StairsType ResolveStairsTypeForOp(
-            Document doc,
-            JObject op,
-            string opLabel,
-            bool preferRampLikeStairsType,
-            StringBuilder log)
-        {
-            var explicitStairs = op["stairsTypeName"]?.ToString();
-            if (!string.IsNullOrWhiteSpace(explicitStairs))
-            {
-                return ResolveStairsType(doc, explicitStairs);
-            }
-
-            if (preferRampLikeStairsType)
-            {
-                var fromRampName = op["rampTypeName"]?.ToString();
-                if (!string.IsNullOrWhiteSpace(fromRampName))
-                {
-                    try
-                    {
-                        return ResolveStairsType(doc, fromRampName);
-                    }
-                    catch
-                    {
-                        // Not a stair type name; fall through to heuristic.
-                    }
-                }
-
-                var all = new FilteredElementCollector(doc).OfClass(typeof(StairsType)).Cast<StairsType>().ToList();
-                var rampish = all.FirstOrDefault(t =>
-                    t.Name.IndexOf("ramp", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    t.Name.IndexOf("rampa", StringComparison.OrdinalIgnoreCase) >= 0);
-                if (rampish != null)
-                {
-                    log.AppendLine(opLabel + ": using stair type \"" + rampish.Name + "\" (name suggests ramp).");
-                    return rampish;
-                }
-
-                var fallback = all.FirstOrDefault() ?? ResolveStairsType(doc, null);
-                log.AppendLine(opLabel + ": no stair type with 'ramp'/'rampa' in name; using \"" + fallback.Name + "\".");
-                return fallback;
-            }
-
-            return ResolveStairsType(doc, null);
         }
 
         private static StairsRunJustification ReadStairsRunJustification(JObject op)

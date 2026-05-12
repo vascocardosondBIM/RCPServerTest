@@ -2,7 +2,6 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
-using RevitSketchPoC.RevitOperations.CreateElements;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -269,8 +268,6 @@ namespace RevitSketchPoC.Chat.Services
             var stairsTypeNames = TakeDistinct(
                 new FilteredElementCollector(doc).OfClass(typeof(StairsType)).Cast<StairsType>().Select(t => t.Name));
 
-            var rampTypeNames = RevitStairsRampCreationOps.ListRampTypeNames(doc, cap);
-
             var doorLabels = new List<string>();
             foreach (var s in new FilteredElementCollector(doc)
                          .OfCategory(BuiltInCategory.OST_Doors)
@@ -359,14 +356,13 @@ namespace RevitSketchPoC.Chat.Services
                 ["floorTypeNames"] = floorTypes,
                 ["ceilingTypeNames"] = ceilingTypes,
                 ["stairsTypeNames"] = stairsTypeNames,
-                ["rampTypeNames"] = rampTypeNames,
                 ["doorTypeNames"] = doorLabels.ToArray(),
                 ["windowTypeNames"] = windowLabels.ToArray(),
                 ["structuralColumnTypeNames"] = structuralColumnLabels.ToArray(),
                 ["architecturalColumnTypeNames"] = architecturalColumnLabels.ToArray(),
                 ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
                 ["note"] =
-                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), rampTypeName (create_ramp only when it matches a stair type name), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), familyTypeName in revitOps. rampTypeNames lists native ramp system types for reference; create_ramp in the plugin builds a straight stair run unless stairsTypeName is set."
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), familyTypeName in revitOps."
             };
         }
 
