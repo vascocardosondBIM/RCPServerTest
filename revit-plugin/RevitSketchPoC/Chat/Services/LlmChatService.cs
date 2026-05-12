@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RevitSketchPoC.Core;
 using RevitSketchPoC.Core.Configuration;
@@ -24,7 +24,7 @@ namespace RevitSketchPoC.Chat.Services
             "Answer clearly and concisely in the same language the user writes (Portuguese or English). " +
             "When a JSON block titled Revit context is provided, treat it as read-only facts from the open model: " +
             "do not invent element ids, names, or counts that contradict that data. " +
-            "If the JSON includes \"namedTypesForRevitOps\", use those exact strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, familyTypeName, and pillarTypeName (structural columns) when emitting revitOps. " +
+            "If the JSON includes \"namedTypesForRevitOps\", use those exact strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (pillarTypeName / columnTypeName for create_pillar), familyTypeName, and sampleLoadableFamilyTypes when emitting revitOps. " +
             "If the JSON includes \"footprintRepairHints\" (floors/ceilings with suggestedWallIds), use those wallIds for wall-chain analyze/repair when you fall back to **`repair_*_to_wall_footprint`**. When a placed Room exists for the slab zone, **`analyze_*_wall_footprint` compares to the Room boundary first** (same idea as **`create_*_from_room`**); pass optional **`roomId`** and **`boundaryLocation`** to match creation. **`repair_*_to_room_footprint`** rebuilds the slab from that Room boundary. " +
             "If the JSON includes \"revitOpsContextHints\", follow them for repair/analyze ops (they clarify that slab tools use model geometry, not the active plan view). " +
             "If selection JSON includes floorIdsInSelection or ceilingIdsInSelection, use those ids for footprint analyze/repair when the user asks about the current selection. " +
@@ -33,12 +33,12 @@ namespace RevitSketchPoC.Chat.Services
             "If the user sends an image, describe or use what you see to help with Revit/BIM questions.\n\n" +
             "### Placement and overlap (critical)\n" +
             "- When the user does NOT give explicit coordinates or a clear placement rule, do NOT guess arbitrary XY (e.g. 0,0, or the same point as an existing door/window/opening from context). Either ask one short clarifying question, or derive placement only from Revit context (room areas, wall endpoints, element coordinates in planGeometryInActiveView).\n" +
-            "- For create_family_instance, create_pillar, and similar point placements: choose a point in visibly clear space using context — offset new instances at least ~0.8 m from door/window locations and from wall openings listed in context unless the user specified an exact spot.\n" +
+            "- For create_family_instance, create_pillar, and similar point placements: choose a point in visibly clear space using context — offset new instances at least ~0.8 m from door/window locations and from wall openings listed in context unless the user specified an exact spot; for create_pillar also respect clearance from existing columns (structural or architectural) and wall centerlines (the plugin rejects placements that are too close).\n" +
             "- Never emit two create_door, two create_window, or door+window at the same (locationX, locationY). Separate openings along the host wall or use distinct segments.\n" +
             "- New floors: see **Floors and ceilings — default workflow** below — prefer create_floor_from_room whenever a placed Room exists.\n" +
             "- create_floor (manual boundary) must not duplicate the same slab outline on the same level unless the user asked to; avoid stacking floors on identical loops.\n" +
             "- If context is missing, empty, or still ambiguous for safe placement, skip the risky create_* op and explain in prose instead of inventing coordinates.\n" +
-            "- Door/window/family placements in one revitOps batch are rejected if too close to each other or to existing doors/windows (plan guard).\n\n" +
+            "- Door/window/family/pillar placements in one revitOps batch are rejected if too close to each other or to existing doors/windows; pillars are also checked against existing columns (structural or architectural), other pillars in the batch, and wall centerlines (plan guard).\n\n" +
             "### When the user attaches a floor plan, sketch, or screenshot AND wants it built or replicated in Revit\n" +
             "- Your primary goal is FIDELITY to the drawing: same wall layout, proportions, and door openings as visible — do not invent a \"better\" house.\n" +
             "- Use the same conventions as the Sketch-to-BIM tool: coordinates in METRES, origin (0,0) at the bottom-left of the outer footprint; walls axis-aligned unless the image clearly shows diagonals.\n" +
@@ -98,7 +98,7 @@ namespace RevitSketchPoC.Chat.Services
             "clampToWallShell default true. Replaces wall profile sketch; commits prior batch ops like create_wall_roman_arch_profile.\n" +
             "- flip_wall: elementIds (array) or elementId — flips wall facing.\n" +
             "- create_family_instance: familyTypeName (required — type name or \"Family : Type\" from context namedTypesForRevitOps.sampleLoadableFamilyTypes); locationX/locationY or location {x,y}; optional levelName; optional rotationDegrees (plan rotation).\n" +
-            "- create_pillar: structural column — pillarTypeName or columnTypeName (structural column entries in namedTypesForRevitOps); locationX/locationY or location {x,y} (metres, same as create_wall); optional levelName (base); optional topLevelName and topOffsetMeters, or heightMeters (unconnected column when top constraint is base level); optional baseOffsetMeters, rotationDegrees, name (Comments).\n" +
+            "- create_pillar: column (structural or architectural) — pillarTypeName or columnTypeName must match **structuralColumnTypeNames** or **architecturalColumnTypeNames** in namedTypesForRevitOps (or exact type / \"Family : Type\"); locationX/locationY or location {x,y} (metres, same as create_wall); optional levelName (base); optional topLevelName and topOffsetMeters, or heightMeters (unconnected column when top constraint is base level); optional baseOffsetMeters, rotationDegrees, name (Comments).\n" +
             "- create_level: name (string), elevationMeters (number — metres from internal origin, same convention as sketch XY origin height reference).\n" +
             "- create_grid: startX, startY, endX, endY (metres — axis line in plan); optional levelName (sets work plane elevation); optional gridName or name for the grid label.\n" +
             "- change_element_level: default when the user wants to move elements to another level without keeping world position. Same ids/level fields as below; optional preserveWorldPosition (boolean, default false) or preservePosition — set true only when the user explicitly asks to keep the same XYZ in the model.\n" +

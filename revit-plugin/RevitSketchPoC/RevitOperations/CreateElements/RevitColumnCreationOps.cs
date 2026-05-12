@@ -10,23 +10,28 @@ using System.Text;
 
 namespace RevitSketchPoC.RevitOperations.CreateElements
 {
-    /// <summary>JSON <c>create_pillar</c> — structural column (<see cref="BuiltInCategory.OST_StructuralColumns"/>) at plan XY on a level.</summary>
+    /// <summary>
+    /// JSON <c>create_pillar</c> — structural (<see cref="BuiltInCategory.OST_StructuralColumns"/>) or architectural
+    /// (<see cref="BuiltInCategory.OST_Columns"/>) column <see cref="FamilySymbol"/> at plan XY on a level.
+    /// </summary>
     public static class RevitColumnCreationOps
     {
         private const double DefaultUnconnectedHeightMeters = 3.0;
+        private const double VerifyLengthToleranceFeet = 0.05;
+        private const int AmbiguousTypeNameListCap = 12;
 
         public static void RunCreatePillarJsonOp(
             Document doc,
             JObject op,
             StringBuilder log,
-            List<(double x, double y, ElementId levelId)>? placementBatch = null)
+            List<(double x, double y, ElementId levelId, PlanPlacementBatchKind kind)>? placementBatch = null)
         {
             var typeName = op["pillarTypeName"]?.ToString()?.Trim()
                            ?? op["columnTypeName"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(typeName))
             {
                 throw new InvalidOperationException(
-                    "create_pillar requires pillarTypeName or columnTypeName (match namedTypesForRevitOps structural column types).");
+                    "create_pillar requires pillarTypeName or columnTypeName (match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames).");
             }
 
             if (!TryReadLocationMeters(op, out var lx, out var ly))
@@ -39,14 +44,24 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             var baseLevel = RevitWallCreationOps.ResolveLevel(doc, string.IsNullOrWhiteSpace(baseLevelName) ? null : baseLevelName, log);
             if (placementBatch != null)
             {
-                RevitPlanPlacementGuard.AssertNewPlanPoint(doc, baseLevel, lx, ly, placementBatch, checkExistingDoorWindow: true);
+                RevitPlanPlacementGuard.ValidateNewPlanPoint(
+                    doc,
+                    baseLevel,
+                    lx,
+                    ly,
+                    placementBatch,
+                    checkExistingDoorWindow: true,
+                    PlanPlacementBatchKind.Pillar);
             }
 
-            var symbol = ResolveStructuralColumnSymbol(doc, typeName, log);
+            var symbol = ResolvePillarColumnSymbol(doc, typeName, out var resolveDetail);
             if (symbol == null)
             {
                 throw new InvalidOperationException(
-                    "create_pillar: no structural column FamilySymbol matches \"" + typeName + "\".");
+                    resolveDetail != null
+                        ? "create_pillar: " + resolveDetail
+                        : "create_pillar: no column FamilySymbol matches \"" + typeName +
+                          "\" (see namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames).");
             }
 
             if (!symbol.IsActive)
@@ -60,6 +75,10 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 RevitWallCreationOps.MetersToFeet(ly),
                 baseLevel.Elevation);
 
+            var structuralType = symbol.Category?.BuiltInCategory == BuiltInCategory.OST_StructuralColumns
+                ? StructuralType.Column
+                : StructuralType.NonStructural;
+
             FamilyInstance instance;
             try
             {
@@ -67,7 +86,7 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                     point,
                     symbol,
                     baseLevel,
-                    StructuralType.Column);
+                    structuralType);
             }
             catch (Exception ex)
             {
@@ -85,44 +104,59 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             var baseOffM = ReadOptionalDouble(op["baseOffsetMeters"]);
             var topOffM = ReadOptionalDouble(op["topOffsetMeters"]);
 
+            var verifyTopLevelTarget = baseLevel.Id;
+            double? verifyTopOffsetFeet = null;
+            double? verifyBaseOffsetFeet = null;
+
             if (!string.IsNullOrWhiteSpace(topLevelName))
             {
                 var topLvl = RevitWallCreationOps.ResolveLevel(doc, topLevelName.Trim(), log);
+                verifyTopLevelTarget = topLvl.Id;
                 TrySetElementIdParam(instance, BuiltInParameter.FAMILY_TOP_LEVEL_PARAM, topLvl.Id);
                 if (topOffM.HasValue)
                 {
-                    TrySetDoubleParam(instance, BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM, RevitWallCreationOps.MetersToFeet(topOffM.Value));
+                    verifyTopOffsetFeet = RevitWallCreationOps.MetersToFeet(topOffM.Value);
+                    TrySetDoubleParam(
+                        instance,
+                        BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM,
+                        verifyTopOffsetFeet.Value);
                 }
             }
             else if (heightM.HasValue)
             {
+                verifyTopLevelTarget = baseLevel.Id;
+                verifyTopOffsetFeet = RevitWallCreationOps.MetersToFeet(heightM.Value);
                 TrySetElementIdParam(instance, BuiltInParameter.FAMILY_TOP_LEVEL_PARAM, baseLevel.Id);
                 TrySetDoubleParam(
                     instance,
                     BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM,
-                    RevitWallCreationOps.MetersToFeet(heightM.Value));
+                    verifyTopOffsetFeet.Value);
             }
             else
             {
                 var nextUp = levelsOrdered.FirstOrDefault(l => l.Elevation > baseLevel.Elevation + 1e-9);
                 if (nextUp != null)
                 {
+                    verifyTopLevelTarget = nextUp.Id;
                     TrySetElementIdParam(instance, BuiltInParameter.FAMILY_TOP_LEVEL_PARAM, nextUp.Id);
                     if (topOffM.HasValue)
                     {
+                        verifyTopOffsetFeet = RevitWallCreationOps.MetersToFeet(topOffM.Value);
                         TrySetDoubleParam(
                             instance,
                             BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM,
-                            RevitWallCreationOps.MetersToFeet(topOffM.Value));
+                            verifyTopOffsetFeet.Value);
                     }
                 }
                 else
                 {
+                    verifyTopLevelTarget = baseLevel.Id;
+                    verifyTopOffsetFeet = RevitWallCreationOps.MetersToFeet(DefaultUnconnectedHeightMeters);
                     TrySetElementIdParam(instance, BuiltInParameter.FAMILY_TOP_LEVEL_PARAM, baseLevel.Id);
                     TrySetDoubleParam(
                         instance,
                         BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM,
-                        RevitWallCreationOps.MetersToFeet(DefaultUnconnectedHeightMeters));
+                        verifyTopOffsetFeet.Value);
                     log.AppendLine(
                         "create_pillar: no level above base; using unconnected height " + DefaultUnconnectedHeightMeters + " m.");
                 }
@@ -130,10 +164,11 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
 
             if (baseOffM.HasValue)
             {
+                verifyBaseOffsetFeet = RevitWallCreationOps.MetersToFeet(baseOffM.Value);
                 TrySetDoubleParam(
                     instance,
                     BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM,
-                    RevitWallCreationOps.MetersToFeet(baseOffM.Value));
+                    verifyBaseOffsetFeet.Value);
             }
 
             var rotationDeg = ReadOptionalDouble(op["rotationDegrees"]);
@@ -144,9 +179,9 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                     var axis = Line.CreateBound(point, point + XYZ.BasisZ);
                     instance.Location.Rotate(axis, rotationDeg.Value * Math.PI / 180.0);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // optional
+                    log.AppendLine("create_pillar: rotation failed: " + ex.Message);
                 }
             }
 
@@ -165,14 +200,125 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
 
             log.AppendLine(
                 "create_pillar id=" + instance.Id + " type=\"" + symbol.Family.Name + " : " + symbol.Name + "\"");
+
+            VerifyPillarParameters(
+                doc,
+                instance,
+                verifyTopLevelTarget,
+                verifyTopOffsetFeet,
+                verifyBaseOffsetFeet,
+                log);
+
+            if (placementBatch != null)
+            {
+                RevitPlanPlacementGuard.AddPlanPointToBatch(placementBatch, lx, ly, baseLevel, PlanPlacementBatchKind.Pillar);
+            }
         }
 
-        private static FamilySymbol? ResolveStructuralColumnSymbol(Document doc, string requested, StringBuilder? log)
+        private static void VerifyPillarParameters(
+            Document doc,
+            FamilyInstance instance,
+            ElementId intendedTopLevelId,
+            double? intendedTopOffsetFeet,
+            double? intendedBaseOffsetFeet,
+            StringBuilder log)
         {
-            var symbols = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_StructuralColumns)
+            try
+            {
+                doc.Regenerate();
+            }
+            catch (Exception ex)
+            {
+                log.AppendLine("create_pillar verify: warning regenerate failed: " + ex.Message);
+                return;
+            }
+
+            var issues = new List<string>();
+
+            var topLevelParam = instance.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM);
+            if (topLevelParam == null || topLevelParam.StorageType != StorageType.ElementId)
+            {
+                issues.Add("top level parameter not readable on this family");
+            }
+            else
+            {
+                var actualTop = topLevelParam.AsElementId();
+                if (!actualTop.Equals(intendedTopLevelId))
+                {
+                    issues.Add(
+                        "top level id mismatch (expected " + intendedTopLevelId.IntegerValue + ", got " +
+                        actualTop.IntegerValue + ")");
+                }
+            }
+
+            if (intendedTopOffsetFeet.HasValue)
+            {
+                var p = instance.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM);
+                if (p == null || p.StorageType != StorageType.Double)
+                {
+                    issues.Add("top offset parameter not readable on this family");
+                }
+                else
+                {
+                    var actual = p.AsDouble();
+                    if (Math.Abs(actual - intendedTopOffsetFeet.Value) > VerifyLengthToleranceFeet)
+                    {
+                        issues.Add(
+                            "top offset feet mismatch (expected ~" +
+                            intendedTopOffsetFeet.Value.ToString("0.###", CultureInfo.InvariantCulture) + ", got " +
+                            actual.ToString("0.###", CultureInfo.InvariantCulture) + ")");
+                    }
+                }
+            }
+
+            if (intendedBaseOffsetFeet.HasValue)
+            {
+                var p = instance.get_Parameter(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM);
+                if (p == null || p.StorageType != StorageType.Double)
+                {
+                    issues.Add("base offset parameter not readable on this family");
+                }
+                else
+                {
+                    var actual = p.AsDouble();
+                    if (Math.Abs(actual - intendedBaseOffsetFeet.Value) > VerifyLengthToleranceFeet)
+                    {
+                        issues.Add(
+                            "base offset feet mismatch (expected ~" +
+                            intendedBaseOffsetFeet.Value.ToString("0.###", CultureInfo.InvariantCulture) + ", got " +
+                            actual.ToString("0.###", CultureInfo.InvariantCulture) + ")");
+                    }
+                }
+            }
+
+            if (issues.Count == 0)
+            {
+                log.AppendLine("create_pillar verify: OK");
+            }
+            else
+            {
+                log.AppendLine("create_pillar verify: warning " + string.Join("; ", issues));
+            }
+        }
+
+        private static List<FamilySymbol> CollectColumnFamilySymbols(Document doc, BuiltInCategory columnCategory)
+        {
+            return new FilteredElementCollector(doc)
+                .OfCategory(columnCategory)
                 .OfClass(typeof(FamilySymbol))
                 .Cast<FamilySymbol>()
+                .ToList();
+        }
+
+        private static FamilySymbol? ResolvePillarColumnSymbol(Document doc, string requested, out string? failureDetail)
+        {
+            failureDetail = null;
+            var structural = CollectColumnFamilySymbols(doc, BuiltInCategory.OST_StructuralColumns);
+            var architectural = CollectColumnFamilySymbols(doc, BuiltInCategory.OST_Columns);
+            var symbols = structural
+                .Concat(architectural)
+                .GroupBy(s => s.Id.IntegerValue)
+                .Select(g => g.First())
                 .ToList();
 
             if (symbols.Count == 0)
@@ -194,17 +340,41 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 return exactFamilyType;
             }
 
-            var contains = symbols.FirstOrDefault(s =>
-                s.Name.IndexOf(req, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                req.IndexOf(s.Name, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                ((s.Family?.Name ?? "") + " " + s.Name).IndexOf(req, StringComparison.OrdinalIgnoreCase) >= 0);
-            if (contains != null)
+            var partialMatches = symbols
+                .Where(s => PartialTypeMatch(s, req))
+                .GroupBy(s => s.Id.IntegerValue)
+                .Select(g => g.First())
+                .ToList();
+
+            if (partialMatches.Count > 1)
             {
-                log?.AppendLine("create_pillar: pillarTypeName partial match -> \"" + contains.Family.Name + " : " + contains.Name + "\".");
-                return contains;
+                var names = partialMatches
+                    .Select(s => "\"" + (s.Family?.Name ?? "?") + " : " + s.Name + "\"")
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .Take(AmbiguousTypeNameListCap)
+                    .ToList();
+                failureDetail =
+                    "ambiguous pillarTypeName — multiple column types match \"" + req + "\": " +
+                    string.Join("; ", names) +
+                    (partialMatches.Count > AmbiguousTypeNameListCap
+                        ? " (+" + (partialMatches.Count - AmbiguousTypeNameListCap) + " more)"
+                        : "");
+                return null;
+            }
+
+            if (partialMatches.Count == 1)
+            {
+                return partialMatches[0];
             }
 
             return null;
+        }
+
+        private static bool PartialTypeMatch(FamilySymbol s, string req)
+        {
+            return s.Name.IndexOf(req, StringComparison.OrdinalIgnoreCase) >= 0
+                   || req.IndexOf(s.Name, StringComparison.OrdinalIgnoreCase) >= 0
+                   || ((s.Family?.Name ?? "") + " " + s.Name).IndexOf(req, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static void TrySetElementIdParam(Element el, BuiltInParameter bip, ElementId id)

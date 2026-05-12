@@ -237,7 +237,7 @@ namespace RevitSketchPoC.Chat.Services
                 ["change_ceiling_kind"] =
                     "Recompute ceiling height: ceilingId (or elementId), ceilingKind false_ceiling|slab_painted (aliases: teto_falso, laje), optional falseCeilingDropMeters.",
                 ["create_pillar"] =
-                    "Structural column: pillarTypeName from namedTypesForRevitOps; plan location in metres (model XY). Optional topLevelName or heightMeters."
+                    "Column (structural or architectural): pillarTypeName or columnTypeName must match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames (\"Family : Type\"). Plan location in metres (model XY). Optional levelName (base), topLevelName, heightMeters (unconnected top from base level), topOffsetMeters, baseOffsetMeters, rotationDegrees, name (Comments)."
             };
 
             if (view != null && view is not ViewPlan)
@@ -249,7 +249,7 @@ namespace RevitSketchPoC.Chat.Services
             return hints;
         }
 
-        /// <summary>Type names the LLM should use in revitOps (walls, floors, doors, windows, generic families).</summary>
+        /// <summary>Type names the LLM should use in revitOps (walls, floors, ceilings, doors, windows, structural/architectural columns, generic families).</summary>
         private static Dictionary<string, object?> BuildNamedTypesForRevitOps(Document doc)
         {
             const int cap = 36;
@@ -293,6 +293,44 @@ namespace RevitSketchPoC.Chat.Services
                 windowLabels.Add((s.Family?.Name ?? "?") + " : " + s.Name);
             }
 
+            var structuralColumnLabels = new List<string>();
+            var structuralColumnSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_StructuralColumns)
+                         .OfClass(typeof(FamilySymbol))
+                         .Cast<FamilySymbol>())
+            {
+                if (structuralColumnLabels.Count >= cap)
+                {
+                    break;
+                }
+
+                var label = (s.Family?.Name ?? "?") + " : " + s.Name;
+                if (structuralColumnSeen.Add(label))
+                {
+                    structuralColumnLabels.Add(label);
+                }
+            }
+
+            var architecturalColumnLabels = new List<string>();
+            var architecturalColumnSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_Columns)
+                         .OfClass(typeof(FamilySymbol))
+                         .Cast<FamilySymbol>())
+            {
+                if (architecturalColumnLabels.Count >= cap)
+                {
+                    break;
+                }
+
+                var label = (s.Family?.Name ?? "?") + " : " + s.Name;
+                if (architecturalColumnSeen.Add(label))
+                {
+                    architecturalColumnLabels.Add(label);
+                }
+            }
+
             var sampleFamilies = new List<string>();
             foreach (var s in new FilteredElementCollector(doc).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>())
             {
@@ -316,9 +354,11 @@ namespace RevitSketchPoC.Chat.Services
                 ["ceilingTypeNames"] = ceilingTypes,
                 ["doorTypeNames"] = doorLabels.ToArray(),
                 ["windowTypeNames"] = windowLabels.ToArray(),
+                ["structuralColumnTypeNames"] = structuralColumnLabels.ToArray(),
+                ["architecturalColumnTypeNames"] = architecturalColumnLabels.ToArray(),
                 ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
                 ["note"] =
-                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, familyTypeName in revitOps."
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), familyTypeName in revitOps."
             };
         }
 

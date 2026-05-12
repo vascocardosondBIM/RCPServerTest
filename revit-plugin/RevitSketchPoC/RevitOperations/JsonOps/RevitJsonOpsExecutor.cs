@@ -7,6 +7,7 @@ using RevitSketchPoC.RevitOperations.SelectElements;
 using RevitSketchPoC.RevitOperations.CreateElements;
 using RevitSketchPoC.RevitOperations.ChangeElements;
 using RevitSketchPoC.RevitOperations.ReviewElements;
+using RevitSketchPoC.RevitOperations.Shared;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -27,7 +28,7 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
             var ok = 0;
             var fail = 0;
             var selectOps = new List<JObject>();
-            var placementBatch = new List<(double x, double y, ElementId levelId)>();
+            var placementBatch = new List<(double x, double y, ElementId levelId, PlanPlacementBatchKind kind)>();
             var wallBatchKeys = new HashSet<string>(StringComparer.Ordinal);
             var openingBatchKeys = new HashSet<string>(StringComparer.Ordinal);
 

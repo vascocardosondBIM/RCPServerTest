@@ -16,7 +16,7 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             Document doc,
             JObject op,
             StringBuilder log,
-            List<(double x, double y, ElementId levelId)>? placementBatch = null)
+            List<(double x, double y, ElementId levelId, PlanPlacementBatchKind kind)>? placementBatch = null)
         {
             var typeName = op["familyTypeName"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(typeName))

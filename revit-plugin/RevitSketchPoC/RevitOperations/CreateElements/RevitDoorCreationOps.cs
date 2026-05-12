@@ -74,7 +74,7 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
             Document doc,
             JObject op,
             StringBuilder log,
-            List<(double x, double y, ElementId levelId)>? placementBatch = null)
+            List<(double x, double y, ElementId levelId, PlanPlacementBatchKind kind)>? placementBatch = null)
         {
             if (!TryReadLocationMeters(op, out var lx, out var ly))
             {
