@@ -10,6 +10,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RevitSketchPoC.Chat.Services
@@ -116,9 +117,11 @@ namespace RevitSketchPoC.Chat.Services
         }
 
         /// <param name="revitContextForSystem">Optional Revit JSON/text merged into the system instruction each call.</param>
+        /// <param name="cancellationToken">Cancels the in-flight HTTP request (e.g. user pressed Cancel).</param>
         public Task<string> CompleteAsync(
             IReadOnlyList<ChatLlmTurn> turns,
-            string? revitContextForSystem = null)
+            string? revitContextForSystem = null,
+            CancellationToken cancellationToken = default)
         {
             var provider = string.IsNullOrWhiteSpace(_settings.LlmProvider)
                 ? "Ollama"
@@ -126,17 +129,17 @@ namespace RevitSketchPoC.Chat.Services
 
             if (string.Equals(provider, "Ollama", StringComparison.OrdinalIgnoreCase))
             {
-                return CompleteOllamaAsync(turns, revitContextForSystem);
+                return CompleteOllamaAsync(turns, revitContextForSystem, cancellationToken);
             }
 
             if (string.Equals(provider, "Gemini", StringComparison.OrdinalIgnoreCase))
             {
-                return CompleteGeminiAsync(turns, revitContextForSystem);
+                return CompleteGeminiAsync(turns, revitContextForSystem, cancellationToken);
             }
 
             if (string.Equals(provider, "Nvidia", StringComparison.OrdinalIgnoreCase))
             {
-                return CompleteNvidiaOpenAiAsync(turns, revitContextForSystem);
+                return CompleteNvidiaOpenAiAsync(turns, revitContextForSystem, cancellationToken);
             }
 
             throw new InvalidOperationException(
@@ -155,7 +158,8 @@ namespace RevitSketchPoC.Chat.Services
 
         private async Task<string> CompleteOllamaAsync(
             IReadOnlyList<ChatLlmTurn> turns,
-            string? revitContextForSystem)
+            string? revitContextForSystem,
+            CancellationToken cancellationToken)
         {
             var baseUrl = NormalizeOllamaBaseUrl(_settings.OllamaBaseUrl);
             var model = string.IsNullOrWhiteSpace(_settings.OllamaModel) ? "llava" : _settings.OllamaModel.Trim();
@@ -198,7 +202,7 @@ namespace RevitSketchPoC.Chat.Services
             var json = JsonConvert.SerializeObject(body);
             using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
             {
-                var response = await Http.PostAsync(url, content).ConfigureAwait(false);
+                var response = await Http.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
                 var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
@@ -213,7 +217,8 @@ namespace RevitSketchPoC.Chat.Services
 
         private async Task<string> CompleteGeminiAsync(
             IReadOnlyList<ChatLlmTurn> turns,
-            string? revitContextForSystem)
+            string? revitContextForSystem,
+            CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_settings.GeminiApiKey))
             {
@@ -283,7 +288,10 @@ namespace RevitSketchPoC.Chat.Services
             };
 
             var json = JsonConvert.SerializeObject(body);
-            var response = await Http.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json"))
+            var response = await Http.PostAsync(
+                    url,
+                    new StringContent(json, Encoding.UTF8, "application/json"),
+                    cancellationToken)
                 .ConfigureAwait(false);
             var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
@@ -296,7 +304,8 @@ namespace RevitSketchPoC.Chat.Services
 
         private async Task<string> CompleteNvidiaOpenAiAsync(
             IReadOnlyList<ChatLlmTurn> turns,
-            string? revitContextForSystem)
+            string? revitContextForSystem,
+            CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_settings.NvidiaApiKey))
             {
@@ -370,7 +379,7 @@ namespace RevitSketchPoC.Chat.Services
                 req.Headers.Accept.ParseAdd("application/json");
                 req.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await Http.SendAsync(req).ConfigureAwait(false);
+                var response = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
                 var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {

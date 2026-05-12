@@ -77,30 +77,52 @@
             </Setter>
         </Style>
 
+        <Style x:Key="CompactSecondaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
         <DataTemplate DataType="{x:Type vm:ChatLine}">
             <Border Margin="0,0,0,10"
                     Padding="14,12"
                     CornerRadius="10"
                     BorderThickness="1"
                     BorderBrush="#FFE2E8F0"
-                    MaxWidth="520"
-                    HorizontalAlignment="Left">
+                    MaxWidth="520">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Background" Value="{StaticResource Brush.BubbleAssistant}" />
+                        <Setter Property="HorizontalAlignment" Value="Left" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsUser}" Value="True">
                                 <Setter Property="Background" Value="{StaticResource Brush.BubbleUser}" />
                                 <Setter Property="BorderBrush" Value="#FFBFDBFE" />
+                                <Setter Property="HorizontalAlignment" Value="Right" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
                 <StackPanel>
-                    <TextBlock FontWeight="SemiBold"
-                               FontSize="11"
-                               Foreground="{StaticResource Brush.TextMuted}"
-                               Text="{Binding Speaker}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   FontWeight="SemiBold"
+                                   FontSize="11"
+                                   Foreground="{StaticResource Brush.TextMuted}"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding Speaker}" />
+                        <Button Grid.Column="1"
+                                Content="Copiar"
+                                ToolTip="Copiar o texto desta mensagem"
+                                Style="{StaticResource CompactSecondaryButton}"
+                                VerticalAlignment="Center"
+                                Margin="8,0,0,0"
+                                Command="{Binding DataContext.CopyMessageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding Text}" />
+                    </Grid>
                     <Image Margin="0,8,0,0"
                            MaxHeight="140"
                            MaxWidth="400"
@@ -122,7 +144,37 @@
                                FontSize="14"
                                Foreground="{StaticResource Brush.Text}"
                                TextWrapping="Wrap"
-                               Text="{Binding Text}" />
+                               Text="{Binding Text}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <FlowDocumentScrollViewer Margin="0,6,0,0"
+                                              MaxHeight="400"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              IsToolBarVisible="False"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              Document="{Binding AssistantDocument}">
+                        <FlowDocumentScrollViewer.Style>
+                            <Style TargetType="FlowDocumentScrollViewer">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </FlowDocumentScrollViewer.Style>
+                    </FlowDocumentScrollViewer>
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -136,6 +188,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="0,0,0,10">
@@ -147,7 +200,7 @@
                                FontSize="13"
                                Foreground="{StaticResource Brush.TextMuted}"
                                TextWrapping="Wrap"
-                               Text="Podes anexar imagens (modelos com visão no Ollama). O assistente pode devolver um bloco JSON revitOps para alterar parâmetros, apagar ou selecionar elementos — só ids do contexto." />
+                               Text="Podes anexar imagens (modelos com visão no Ollama). O assistente pode devolver um bloco JSON revitOps. Respostas em Markdown (títulos, negrito, listas, código) são formatadas na conversa. Enter envia; Shift+Enter nova linha; Cancelar interrompe o pedido em curso." />
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Margin="0,0,0,12">
@@ -189,15 +242,50 @@
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="0,0,6,0">
                     <ItemsControl ItemsSource="{Binding Messages}"
-                                  Focusable="False" />
+                                  Focusable="False">
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                    </ItemsControl>
                 </ScrollViewer>
 
-                <Grid Grid.Row="3" Margin="0,14,0,0">
+                <StackPanel Grid.Row="3" Margin="0,10,0,0" Orientation="Vertical">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ProgressBar Width="140"
+                                     Height="4"
+                                     IsIndeterminate="True"
+                                     Foreground="{StaticResource Brush.Accent}"
+                                     Background="{StaticResource Brush.Border}" />
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock FontSize="12"
+                                       Foreground="{StaticResource Brush.TextMuted}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="400"
+                                       Text="{Binding ProcessingStatus}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <Grid Grid.Row="4" Margin="0,14,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
+                    <TextBox x:Name="ChatInputTextBox"
+                             Grid.Column="0"
                              MinHeight="76"
                              AcceptsReturn="True"
                              TextWrapping="Wrap"
@@ -205,11 +293,22 @@
                              Padding="12,10"
                              BorderBrush="{StaticResource Brush.Border}"
                              Foreground="{StaticResource Brush.Text}"
+                             IsReadOnly="{Binding IsBusy}"
                              Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}" />
                     <Button Grid.Column="1"
+                            Content="Cancelar"
+                            ToolTip="Interromper o pedido ao modelo (se estiver em curso)"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="10,0,0,0"
+                            MinHeight="76"
+                            MinWidth="88"
+                            VerticalAlignment="Stretch"
+                            Command="{Binding CancelSendCommand}" />
+                    <Button Grid.Column="2"
                             Content="Enviar"
+                            ToolTip="Enviar mensagem (Enter no campo de texto)"
                             Style="{StaticResource PrimaryButton}"
-                            Margin="12,0,0,0"
+                            Margin="10,0,0,0"
                             MinHeight="76"
                             MinWidth="96"
                             VerticalAlignment="Stretch"

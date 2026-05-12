@@ -4,8 +4,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Autodesk.Revit.UI;
@@ -21,20 +25,70 @@ namespace RevitSketchPoC.Chat.ViewModels
     public sealed class ChatLine : INotifyPropertyChanged
     {
         private string _text = string.Empty;
+        private bool _isUser;
+        private FlowDocument? _assistantDocument;
         private string? _imageAttachmentPath;
         private BitmapImage? _imagePreview;
 
-        public bool IsUser { get; set; }
+        public bool IsUser
+        {
+            get => _isUser;
+            set
+            {
+                _isUser = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(Speaker));
+                RebuildAssistantDocument();
+            }
+        }
 
         public string Speaker => IsUser ? "Tu" : "Assistente";
+
+        /// <summary>Markdown-rendered body for assistant lines; null for user lines.</summary>
+        public FlowDocument? AssistantDocument
+        {
+            get => _assistantDocument;
+            private set
+            {
+                _assistantDocument = value;
+                OnPropertyChanged();
+            }
+        }
 
         public string Text
         {
             get => _text;
             set
             {
-                _text = value;
+                _text = value ?? string.Empty;
                 OnPropertyChanged();
+                RebuildAssistantDocument();
+            }
+        }
+
+        private void RebuildAssistantDocument()
+        {
+            if (IsUser)
+            {
+                AssistantDocument = null;
+                return;
+            }
+
+            try
+            {
+                AssistantDocument = ChatMarkdownToFlowDocument.Build(_text);
+            }
+            catch
+            {
+                var fallback = new FlowDocument
+                {
+                    FontFamily = new FontFamily("Segoe UI"),
+                    FontSize = 14,
+                    PageWidth = 468,
+                    PagePadding = new Thickness(0)
+                };
+                fallback.Blocks.Add(new Paragraph(new Run(_text)));
+                AssistantDocument = fallback;
             }
         }
 
@@ -116,6 +170,10 @@ namespace RevitSketchPoC.Chat.ViewModels
         private readonly RelayCommand _clearSelectionContextCommand;
         private readonly RelayCommand _attachImageCommand;
         private readonly RelayCommand _clearPendingImageCommand;
+        private readonly RelayCommand _copyMessageCommand;
+        private readonly RelayCommand _cancelSendCommand;
+        private string _processingStatus = string.Empty;
+        private CancellationTokenSource? _sendCts;
 
         public ObservableCollection<ChatLine> Messages { get; } = new ObservableCollection<ChatLine>();
 
@@ -133,6 +191,24 @@ namespace RevitSketchPoC.Chat.ViewModels
             _clearSelectionContextCommand = new RelayCommand(_ => ClearSelectionContext(), _ => !IsBusy);
             _attachImageCommand = new RelayCommand(_ => AttachImage(), _ => !IsBusy);
             _clearPendingImageCommand = new RelayCommand(_ => ClearPendingImage(), _ => !IsBusy && HasPendingImage);
+            _copyMessageCommand = new RelayCommand(
+                p =>
+                {
+                    try
+                    {
+                        var s = p as string;
+                        if (!string.IsNullOrEmpty(s))
+                        {
+                            Clipboard.SetText(s);
+                        }
+                    }
+                    catch
+                    {
+                        // Clipboard can fail in rare host states
+                    }
+                },
+                _ => true);
+            _cancelSendCommand = new RelayCommand(_ => _sendCts?.Cancel(), _ => IsBusy);
 
             RefreshProjectContext();
         }
@@ -181,6 +257,7 @@ namespace RevitSketchPoC.Chat.ViewModels
                 _clearSelectionContextCommand.RaiseCanExecuteChanged();
                 _attachImageCommand.RaiseCanExecuteChanged();
                 _clearPendingImageCommand.RaiseCanExecuteChanged();
+                _cancelSendCommand.RaiseCanExecuteChanged();
             }
         }
 
@@ -194,12 +271,25 @@ namespace RevitSketchPoC.Chat.ViewModels
             }
         }
 
+        /// <summary>Short status while <see cref="IsBusy"/> (e.g. waiting for the LLM HTTP response).</summary>
+        public string ProcessingStatus
+        {
+            get => _processingStatus;
+            private set
+            {
+                _processingStatus = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
         public ICommand SendCommand => _sendCommand;
         public ICommand RefreshProjectContextCommand => _refreshProjectCommand;
         public ICommand IncludeSelectionContextCommand => _includeSelectionCommand;
         public ICommand ClearSelectionContextCommand => _clearSelectionContextCommand;
         public ICommand AttachImageCommand => _attachImageCommand;
         public ICommand ClearPendingImageCommand => _clearPendingImageCommand;
+        public ICommand CopyMessageCommand => _copyMessageCommand;
+        public ICommand CancelSendCommand => _cancelSendCommand;
 
         private bool IsDocumentAlive()
         {
@@ -427,16 +517,28 @@ namespace RevitSketchPoC.Chat.ViewModels
             Messages.Add(line);
             PendingImagePath = null;
             IsBusy = true;
+            var provider = string.IsNullOrWhiteSpace(_pluginSettings.LlmProvider)
+                ? "Ollama"
+                : _pluginSettings.LlmProvider.Trim();
+            ProcessingStatus = "A contactar " + provider + "…";
+            _sendCts?.Dispose();
+            _sendCts = new CancellationTokenSource();
+            var token = _sendCts.Token;
 
             try
             {
                 var turns = BuildApiTurns();
                 var revitCtx = BuildRevitContextForApi();
-                var reply = await Task.Run(async () =>
-                        await _chat.CompleteAsync(turns, string.IsNullOrWhiteSpace(revitCtx) ? null : revitCtx).ConfigureAwait(false))
+                ProcessingStatus = "A aguardar resposta do modelo…";
+                var reply = await _chat
+                    .CompleteAsync(turns, string.IsNullOrWhiteSpace(revitCtx) ? null : revitCtx, token)
                     .ConfigureAwait(true);
                 Messages.Add(new ChatLine { IsUser = false, Text = reply });
                 TryEnqueueRevitOps(reply);
+            }
+            catch (OperationCanceledException)
+            {
+                Messages.Add(new ChatLine { IsUser = false, Text = "Pedido cancelado." });
             }
             catch (Exception ex)
             {
@@ -444,7 +546,10 @@ namespace RevitSketchPoC.Chat.ViewModels
             }
             finally
             {
+                ProcessingStatus = string.Empty;
                 IsBusy = false;
+                _sendCts?.Dispose();
+                _sendCts = null;
             }
         }
 

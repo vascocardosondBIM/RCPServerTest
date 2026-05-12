@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 
@@ -29,6 +30,39 @@ namespace RevitSketchPoC.Chat.Views
 
             Content = LoadLayoutFromXaml();
             Closing += OnClosingWhileBusy;
+            Loaded += OnWindowLoaded;
+        }
+
+        private void OnWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            if (Content is not FrameworkElement root)
+            {
+                return;
+            }
+
+            if (root.FindName("ChatInputTextBox") is System.Windows.Controls.TextBox tb)
+            {
+                tb.PreviewKeyDown += ChatInputTextBox_PreviewKeyDown;
+            }
+        }
+
+        private void ChatInputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+            {
+                return;
+            }
+
+            if (Keyboard.Modifiers == ModifierKeys.Shift)
+            {
+                return;
+            }
+
+            if (ViewModel?.SendCommand.CanExecute(null) == true)
+            {
+                ViewModel.SendCommand.Execute(null);
+                e.Handled = true;
+            }
         }
 
         public void SetViewModel(LlmChatViewModel viewModel)
