@@ -44,6 +44,15 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                     }
 
                     var op = opObj["op"]?.ToString()?.Trim()?.ToLowerInvariant();
+                    if (string.Equals(op, "create stairs", StringComparison.OrdinalIgnoreCase))
+                    {
+                        op = "create_stairs";
+                    }
+                    else if (string.Equals(op, "create ramp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        op = "create_ramp";
+                    }
+
                     if (string.IsNullOrEmpty(op))
                     {
                         fail++;
@@ -58,7 +67,9 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                     }
 
                     if (string.Equals(op, "create_wall_roman_arch_profile", StringComparison.Ordinal) ||
-                        string.Equals(op, "create_wall_custom_profile_void", StringComparison.Ordinal))
+                        string.Equals(op, "create_wall_custom_profile_void", StringComparison.Ordinal) ||
+                        string.Equals(op, "create_stairs", StringComparison.Ordinal) ||
+                        string.Equals(op, "create_ramp", StringComparison.Ordinal))
                     {
                         try
                         {
@@ -74,9 +85,17 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                             {
                                 RevitWallArchProfileOps.RunCreateWallRomanArchProfileJsonOp(doc, opObj, log);
                             }
-                            else
+                            else if (string.Equals(op, "create_wall_custom_profile_void", StringComparison.Ordinal))
                             {
                                 RevitWallCustomProfileVoidOps.RunCreateWallCustomProfileVoidJsonOp(doc, opObj, log);
+                            }
+                            else if (string.Equals(op, "create_stairs", StringComparison.Ordinal))
+                            {
+                                RevitStairsRampCreationOps.RunCreateStairsJsonOp(doc, opObj, log);
+                            }
+                            else
+                            {
+                                RevitStairsRampCreationOps.RunCreateRampJsonOp(doc, opObj, log);
                             }
 
                             ok++;
