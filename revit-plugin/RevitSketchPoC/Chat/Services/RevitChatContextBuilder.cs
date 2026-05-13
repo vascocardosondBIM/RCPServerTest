@@ -241,6 +241,8 @@ namespace RevitSketchPoC.Chat.Services
                     "Column (structural or architectural): pillarTypeName or columnTypeName must match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames (\"Family : Type\"). Plan location in metres (model XY). Optional levelName (base), topLevelName, heightMeters (unconnected top from base level), topOffsetMeters, baseOffsetMeters, rotationDegrees, name (Comments).",
                 ["create_beam"] =
                     "Structural beam (viga): beamTypeName must match namedTypesForRevitOps.structuralFramingTypeNames (\"Family : Type\"). Straight axis: same endpoints as create_wall — startX/startY/endX/endY or start/end {x,y} in metres on levelName (reference level). Optional zOffsetMeters (vertical offset of the axis from level elevation). Optional name (Comments).",
+                ["create_stairs"] =
+                    "Component stair: bottomLevelName/baseLevelName, topLevelName, start/end path in metres. Auto railings **removed by default**; keepStairsRailings true keeps Revit defaults. **railingTypeName** / **stairRailingTypeName** / **guardrailTypeName** (railingTypeNames): with keep=true changes type of existing stair railings; with keep=false removes then Railing.Create with that type. Optional **stairRailingPlacement**: treads (default) | stringer. Freeform: create_guardrail.",
                 ["create_guardrail"] =
                     "Guarda-corpo / corrimão (Railing): railingTypeName (or guardrailTypeName) must match namedTypesForRevitOps.railingTypeNames. Straight path in plan: startX/startY/endX/endY or start/end {x,y} in metres; levelName; optional zOffsetMeters. Baluster spacing and rail height follow the chosen RailingType in Revit (edit type in UI to change). Alias op: create_railing."
             };
@@ -391,7 +393,7 @@ namespace RevitSketchPoC.Chat.Services
                 ["structuralFramingTypeNames"] = structuralFramingLabels.ToArray(),
                 ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
                 ["note"] =
-                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), railingTypeName (create_guardrail / create_railing), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), structuralFramingTypeNames (create_beam beamTypeName), familyTypeName in revitOps."
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), railingTypeName (create_guardrail / create_railing / **create_stairs** stair-hosted railings), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), structuralFramingTypeNames (create_beam beamTypeName), familyTypeName in revitOps."
             };
         }
 

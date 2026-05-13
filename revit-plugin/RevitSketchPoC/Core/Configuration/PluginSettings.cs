@@ -26,6 +26,9 @@ namespace RevitSketchPoC.Core.Configuration
         public string NvidiaChatCompletionsUrl { get; set; } = string.Empty;
         public double DefaultWallHeightMeters { get; set; } = 3.0;
 
+        /// <summary>Default railing type display name when <c>create_guardrail</c> omits <c>railingTypeName</c> (must still resolve uniquely in the project).</summary>
+        public string DefaultRailingTypeName { get; set; } = string.Empty;
+
         /// <summary>Default vertical drop (m) for false ceilings when JSON omits <c>falseCeilingDropMeters</c>.</summary>
         public double DefaultFalseCeilingDropMeters { get; set; } = 0.30;
     }

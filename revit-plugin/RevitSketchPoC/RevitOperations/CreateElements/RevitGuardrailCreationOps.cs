@@ -100,7 +100,8 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                 Math.Round(lenM, 3).ToString(CultureInfo.InvariantCulture) + "m");
         }
 
-        private static RailingType ResolveRailingType(Document doc, string? railingTypeName, StringBuilder? log)
+        /// <summary>Resolves a <see cref="RailingType"/> by name (exact, partial, or first in project) — shared by <c>create_guardrail</c> and <c>create_stairs</c>.</summary>
+        public static RailingType ResolveRailingType(Document doc, string? railingTypeName, StringBuilder? log)
         {
             var types = new FilteredElementCollector(doc)
                 .OfClass(typeof(RailingType))

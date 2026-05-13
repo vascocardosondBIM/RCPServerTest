@@ -8,5 +8,7 @@
   "NvidiaApiKey": "",
   "NvidiaModel": "google/gemma-3n-e4b-it",
   "NvidiaChatCompletionsUrl": "",
-  "DefaultWallHeightMeters": 3.0
+  "DefaultWallHeightMeters": 3.0,
+  "DefaultFalseCeilingDropMeters": 0.30,
+  "DefaultRailingTypeName": ""
 }
