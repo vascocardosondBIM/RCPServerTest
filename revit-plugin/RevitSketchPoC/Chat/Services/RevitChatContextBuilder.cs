@@ -237,7 +237,9 @@ namespace RevitSketchPoC.Chat.Services
                 ["change_ceiling_kind"] =
                     "Recompute ceiling height: ceilingId (or elementId), ceilingKind false_ceiling|slab_painted (aliases: teto_falso, laje), optional falseCeilingDropMeters.",
                 ["create_pillar"] =
-                    "Column (structural or architectural): pillarTypeName or columnTypeName must match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames (\"Family : Type\"). Plan location in metres (model XY). Optional levelName (base), topLevelName, heightMeters (unconnected top from base level), topOffsetMeters, baseOffsetMeters, rotationDegrees, name (Comments)."
+                    "Column (structural or architectural): pillarTypeName or columnTypeName must match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames (\"Family : Type\"). Plan location in metres (model XY). Optional levelName (base), topLevelName, heightMeters (unconnected top from base level), topOffsetMeters, baseOffsetMeters, rotationDegrees, name (Comments).",
+                ["create_beam"] =
+                    "Structural beam (viga): beamTypeName must match namedTypesForRevitOps.structuralFramingTypeNames (\"Family : Type\"). Straight axis: same endpoints as create_wall — startX/startY/endX/endY or start/end {x,y} in metres on levelName (reference level). Optional zOffsetMeters (vertical offset of the axis from level elevation). Optional name (Comments)."
             };
 
             if (view != null && view is not ViewPlan)
@@ -249,7 +251,7 @@ namespace RevitSketchPoC.Chat.Services
             return hints;
         }
 
-        /// <summary>Type names the LLM should use in revitOps (walls, floors, ceilings, doors, windows, structural/architectural columns, generic families).</summary>
+        /// <summary>Type names the LLM should use in revitOps (walls, floors, ceilings, doors, windows, columns, structural framing/beams, generic families).</summary>
         private static Dictionary<string, object?> BuildNamedTypesForRevitOps(Document doc)
         {
             const int cap = 36;
@@ -334,6 +336,25 @@ namespace RevitSketchPoC.Chat.Services
                 }
             }
 
+            var structuralFramingLabels = new List<string>();
+            var structuralFramingSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in new FilteredElementCollector(doc)
+                         .OfCategory(BuiltInCategory.OST_StructuralFraming)
+                         .OfClass(typeof(FamilySymbol))
+                         .Cast<FamilySymbol>())
+            {
+                if (structuralFramingLabels.Count >= cap)
+                {
+                    break;
+                }
+
+                var label = (s.Family?.Name ?? "?") + " : " + s.Name;
+                if (structuralFramingSeen.Add(label))
+                {
+                    structuralFramingLabels.Add(label);
+                }
+            }
+
             var sampleFamilies = new List<string>();
             foreach (var s in new FilteredElementCollector(doc).OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>())
             {
@@ -360,9 +381,10 @@ namespace RevitSketchPoC.Chat.Services
                 ["windowTypeNames"] = windowLabels.ToArray(),
                 ["structuralColumnTypeNames"] = structuralColumnLabels.ToArray(),
                 ["architecturalColumnTypeNames"] = architecturalColumnLabels.ToArray(),
+                ["structuralFramingTypeNames"] = structuralFramingLabels.ToArray(),
                 ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
                 ["note"] =
-                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), familyTypeName in revitOps."
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), structuralFramingTypeNames (create_beam beamTypeName), familyTypeName in revitOps."
             };
         }
 

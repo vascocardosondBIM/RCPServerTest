@@ -441,6 +441,15 @@ namespace RevitSketchPoC.RevitOperations.CreateElements
                    TryReadNumber(op["endX"], out x1) && TryReadNumber(op["endY"], out y1);
         }
 
+        /// <summary>Plan segment in metres — same JSON shape as <c>create_wall</c> (start/end or startX..endY).</summary>
+        public static bool TryReadPlanSegmentMetersFromJson(
+            JObject op,
+            out double x0,
+            out double y0,
+            out double x1,
+            out double y1) =>
+            TryReadPlanSegmentMeters(op, out x0, out y0, out x1, out y1);
+
         private static bool TryReadArcByThreePointsMeters(
             JObject op,
             out double x0,

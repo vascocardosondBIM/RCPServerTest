@@ -208,6 +208,10 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                 RevitColumnCreationOps.RunCreatePillarJsonOp(doc, opObj, log, placementBatch);
                                 ok++;
                                 break;
+                            case "create_beam":
+                                RevitBeamCreationOps.RunCreateBeamJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
                             case "create_level":
                                 RevitLevelCreationOps.RunCreateLevelJsonOp(doc, opObj, log);
                                 ok++;
