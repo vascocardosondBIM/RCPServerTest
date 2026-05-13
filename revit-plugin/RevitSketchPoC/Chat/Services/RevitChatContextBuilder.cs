@@ -33,7 +33,8 @@ namespace RevitSketchPoC.Chat.Services
             BuiltInCategory.OST_Furniture,
             BuiltInCategory.OST_GenericModel,
             BuiltInCategory.OST_StructuralColumns,
-            BuiltInCategory.OST_StructuralFraming
+            BuiltInCategory.OST_StructuralFraming,
+            BuiltInCategory.OST_Railings
         };
 
         /// <summary>Project-wide snapshot (no geometry dump).</summary>
@@ -239,7 +240,9 @@ namespace RevitSketchPoC.Chat.Services
                 ["create_pillar"] =
                     "Column (structural or architectural): pillarTypeName or columnTypeName must match namedTypesForRevitOps.structuralColumnTypeNames or architecturalColumnTypeNames (\"Family : Type\"). Plan location in metres (model XY). Optional levelName (base), topLevelName, heightMeters (unconnected top from base level), topOffsetMeters, baseOffsetMeters, rotationDegrees, name (Comments).",
                 ["create_beam"] =
-                    "Structural beam (viga): beamTypeName must match namedTypesForRevitOps.structuralFramingTypeNames (\"Family : Type\"). Straight axis: same endpoints as create_wall — startX/startY/endX/endY or start/end {x,y} in metres on levelName (reference level). Optional zOffsetMeters (vertical offset of the axis from level elevation). Optional name (Comments)."
+                    "Structural beam (viga): beamTypeName must match namedTypesForRevitOps.structuralFramingTypeNames (\"Family : Type\"). Straight axis: same endpoints as create_wall — startX/startY/endX/endY or start/end {x,y} in metres on levelName (reference level). Optional zOffsetMeters (vertical offset of the axis from level elevation). Optional name (Comments).",
+                ["create_guardrail"] =
+                    "Guarda-corpo / corrimão (Railing): railingTypeName (or guardrailTypeName) must match namedTypesForRevitOps.railingTypeNames. Straight path in plan: startX/startY/endX/endY or start/end {x,y} in metres; levelName; optional zOffsetMeters. Baluster spacing and rail height follow the chosen RailingType in Revit (edit type in UI to change). Alias op: create_railing."
             };
 
             if (view != null && view is not ViewPlan)
@@ -251,7 +254,7 @@ namespace RevitSketchPoC.Chat.Services
             return hints;
         }
 
-        /// <summary>Type names the LLM should use in revitOps (walls, floors, ceilings, doors, windows, columns, structural framing/beams, generic families).</summary>
+        /// <summary>Type names the LLM should use in revitOps (walls, floors, ceilings, stairs, railings, doors, windows, columns, beams, generic families).</summary>
         private static Dictionary<string, object?> BuildNamedTypesForRevitOps(Document doc)
         {
             const int cap = 36;
@@ -269,6 +272,9 @@ namespace RevitSketchPoC.Chat.Services
 
             var stairsTypeNames = TakeDistinct(
                 new FilteredElementCollector(doc).OfClass(typeof(StairsType)).Cast<StairsType>().Select(t => t.Name));
+
+            var railingTypeNames = TakeDistinct(
+                new FilteredElementCollector(doc).OfClass(typeof(RailingType)).Cast<RailingType>().Select(t => t.Name));
 
             var doorLabels = new List<string>();
             foreach (var s in new FilteredElementCollector(doc)
@@ -377,6 +383,7 @@ namespace RevitSketchPoC.Chat.Services
                 ["floorTypeNames"] = floorTypes,
                 ["ceilingTypeNames"] = ceilingTypes,
                 ["stairsTypeNames"] = stairsTypeNames,
+                ["railingTypeNames"] = railingTypeNames,
                 ["doorTypeNames"] = doorLabels.ToArray(),
                 ["windowTypeNames"] = windowLabels.ToArray(),
                 ["structuralColumnTypeNames"] = structuralColumnLabels.ToArray(),
@@ -384,7 +391,7 @@ namespace RevitSketchPoC.Chat.Services
                 ["structuralFramingTypeNames"] = structuralFramingLabels.ToArray(),
                 ["sampleLoadableFamilyTypes"] = sampleFamilies.ToArray(),
                 ["note"] =
-                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), structuralFramingTypeNames (create_beam beamTypeName), familyTypeName in revitOps."
+                    "Use these strings for wallTypeName, floorTypeName, ceilingTypeName, stairsTypeName (create_stairs), railingTypeName (create_guardrail / create_railing), doorTypeName, windowTypeName, structuralColumnTypeNames or architecturalColumnTypeNames (create_pillar pillarTypeName/columnTypeName), structuralFramingTypeNames (create_beam beamTypeName), familyTypeName in revitOps."
             };
         }
 

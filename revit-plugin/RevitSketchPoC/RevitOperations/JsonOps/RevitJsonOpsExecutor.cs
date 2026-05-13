@@ -212,6 +212,11 @@ namespace RevitSketchPoC.RevitOperations.JsonOps
                                 RevitBeamCreationOps.RunCreateBeamJsonOp(doc, opObj, log);
                                 ok++;
                                 break;
+                            case "create_guardrail":
+                            case "create_railing":
+                                RevitGuardrailCreationOps.RunCreateGuardrailJsonOp(doc, opObj, log);
+                                ok++;
+                                break;
                             case "create_level":
                                 RevitLevelCreationOps.RunCreateLevelJsonOp(doc, opObj, log);
                                 ok++;
