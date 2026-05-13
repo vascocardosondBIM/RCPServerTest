@@ -19,9 +19,9 @@ No **mesmo** servidor MCP Node: a maioria das tools fala com o plugin original e
 | --- | --- |
 | **`Core/`** | Peças transversais: `Application/SketchToBimApp.cs` (classe `RevitSketchPoC.App.SketchToBimApp` — entrada do add-in, ribbon, `ExternalEvent`), `Configuration/PluginSettings.cs` (lê `pluginsettings.json`), `ViewModels/RelayCommand.cs`, `RevitModelessWindowHost.cs` (abrir janelas WPF no `Idling` para evitar erros com o Revit). |
 | **`Chat/`** | **Assistente IA** no Revit: ribbon, `LlmChatService`, contexto JSON (`RevitChatContextBuilder`, geometria em planta quando aplicável), anexos de imagem, parsing e aplicação de `revitOps` (`ChatRevitOpsParser`, `ExternalEvent`). Ver [Assistente IA (chat)](#assistente-ia-chat). |
-| **`Sketch/`** | **Sketch → BIM**: fluxo de imagem + prompt → LLM → JSON de paredes/divisões/portas; `SketchLlmPrompts`, intérpretes Ollama / Gemini / NVIDIA, `SketchGenerationRunner`, **pré-visualização** (`SketchInterpretationPreviewWindow`) antes de aplicar, janela de upload (`SketchUploadWindow` + XAML embutido). |
-| **`RevitOperations/`** | Operações sobre o modelo Revit usadas pelo sketch e pelo chat: **`CreateElements/`** (paredes, portas, salas, **pisos/tetos a partir de Room**, vãos, perfis), **`SketchBuild/`** (`RevitModelBuilder` — transação única após interpretação), **`JsonOps/`** (`RevitJsonOpsExecutor` — `revitOps` do chat), **`ReviewElements/`** (análise/reparo de footprint de piso/teto vs paredes), **`ChangeElements/`**, **`DeleteElements/`**, **`SelectElements/`**, **`Shared/`** (geometria JSON, contornos de divisão, etc.). |
-| **`Integration/`** | Ligação **TCP JSON-RPC** ao bridge Node: **`Rpc/`** (servidor, dispatcher para API thread), **`Routing/`** (`McpCommandRouter` — método `create_house_from_sketch`), **`Contracts/`** (DTOs do protocolo). |
+| **`Sketch/`** | **Sketch → BIM**: fluxo de imagem + prompt → LLM → JSON de paredes, **rooms**, portas, **janelas** e **pisos** (conforme interpretação); `SketchLlmPrompts`, intérpretes Ollama / Gemini / NVIDIA, `SketchGenerationRunner`, **pré-visualização** (`SketchInterpretationPreviewWindow`) antes de aplicar, janela de upload (`SketchUploadWindow` + XAML embutido). |
+| **`RevitOperations/`** | Operações sobre o modelo Revit usadas pelo sketch e pelo chat: **`CreateElements/`** (paredes, portas, salas, **escadas**, **pilares**, **pisos/tetos a partir de Room**, vãos, perfis), **`SketchBuild/`** (`RevitModelBuilder` — transação única após interpretação), **`JsonOps/`** (`RevitJsonOpsExecutor` — `revitOps` do chat), **`ReviewElements/`** (análise/reparo de footprint de piso/teto vs paredes ou Room), **`ChangeElements/`**, **`DeleteElements/`**, **`SelectElements/`**, **`Shared/`** (geometria JSON, contornos de divisão, etc.). |
+| **`Integration/`** | Ligação **TCP JSON-RPC** ao bridge Node: **`Rpc/`** (servidor, dispatcher para API thread), **`Routing/`** (`McpCommandRouter` — **só** o método `create_house_from_sketch`; restantes métodos → erro), **`Contracts/`** (DTOs do protocolo). |
 | **`deploy/`** | Ficheiros para instalação: **`RevitSketchPoC.addin`**, **`pluginsettings.example.json`** (modelo sem segredos), e normalmente uma cópia local de **`pluginsettings.json`** (não commits com chaves). |
 
 Ficheiros na **raiz desta pasta**: `RevitSketchPoC.csproj`, `RevitSketchPoC.sln`, `README.md` (este ficheiro).
@@ -30,9 +30,25 @@ Ficheiros na **raiz desta pasta**: `RevitSketchPoC.csproj`, `RevitSketchPoC.sln`
 
 ## Fluxos principais
 
-1. **Ribbon “Sketch AI PoC” → Upload sketch** — escolhes imagem e prompt; o LLM devolve JSON; opcionalmente vês a **pré-visualização** (imagem vs. interpretação); depois o Revit cria paredes/quartos/portas numa transação.
+1. **Ribbon “Sketch AI PoC” → Upload sketch** — escolhes imagem e prompt; o LLM devolve JSON; opcionalmente vês a **pré-visualização** (imagem vs. interpretação); depois o Revit aplica **paredes, rooms, portas, janelas e pisos** (conforme o JSON e as opções abaixo) numa transação.
 2. **Ribbon → Assistente IA (AI Chat)** — conversa com o modelo, contexto JSON do projeto/seleção, imagens opcionais, e aplicação automática de `revitOps` no Revit. **Documentação detalhada:** secção [Assistente IA (chat)](#assistente-ia-chat) abaixo.
 3. **MCP `create_house_from_sketch`** — o Node envia o pedido por TCP para este add-in; o mesmo pipeline de interpretação + build que o sketch na UI.
+
+### Pedido sketch / MCP (`SketchToBimRequest`)
+
+Contrato em `Sketch/Contracts/SketchContracts.cs`. Campos úteis (UI e JSON-RPC `create_house_from_sketch`):
+
+| Campo | Função |
+| --- | --- |
+| `imagePath` / `imageBase64` + `mimeType` | Imagem ou planta; PDF é convertido para PNG (1.ª página; vê `pdfPageNumber`). |
+| `prompt` | Instruções extra ao modelo (opcional). |
+| `targetLevelName` | Nível onde criar geometria (opcional). |
+| `wallTypeName`, `floorTypeName` | Tipos Revit a preferir quando aplicável. |
+| `autoCreateRooms`, `autoCreateDoors`, `autoCreateWindows`, `autoCreateFloors` | Ligar/desligar criação automática de cada categoria após interpretação (todos `true` por defeito). |
+| `showPreviewUi` | Se `true`, mostra a janela de pré-visualização antes de aplicar (por defeito `true`; em automação MCP podes enviar `false` para aplicar sem diálogo). |
+| `pdfPageNumber` | Página base-1 quando o ficheiro é PDF (por defeito `1`). |
+
+O JSON interpretado pelo LLM pode incluir listas `walls`, `rooms`, `doors`, `windows`, `floors` — o builder materializa o que estiver presente e permitido pelos toggles.
 
 ---
 
@@ -46,7 +62,7 @@ O chat é a janela **“Assistente IA”** (ribbon **Sketch AI PoC** → botão 
 | --- | --- |
 | **Conversa geral** | Perguntas sobre Revit/BIM, interpretação de plantas ou do modelo — o assistente responde na **mesma língua** que escreves (português ou inglês), salvo pedido explícito em contrário. |
 | **Texto + imagem** | Mensagens só texto, ou **anexar imagem** (PNG, JPG/JPEG, WebP, BMP; até ~6 MB) a enviar **com a próxima** mensagem; na bolha do utilizador aparece pré-visualização da imagem. Modelos **com visão** (ex. Ollama `llava`) analisam a figura. |
-| **Contexto do projeto** | Botão **Atualizar projeto** — gera o JSON do documento: título/caminho, vista ativa, níveis (até 20), contagens por categoria, **`namedTypesForRevitOps`** (tipos para `revitOps`), **`planGeometryInActiveView`** em **vista de planta** (paredes/portas/janelas/rooms em metros; omitido em 3D — não impede operações que usam geometria da base de dados), **`footprintRepairHints`** (sugestões de `wallIds` por piso/teto para analyze/repair), **`revitOpsContextHints`** (notas curtas, ex.: repair em 3D), e notas gerais. |
+| **Contexto do projeto** | Botão **Atualizar projeto** — gera o JSON do documento: título/caminho, vista ativa, níveis (até 20), contagens por categoria, **`namedTypesForRevitOps`** (strings exactas para `wallTypeName`, `floorTypeName`, `ceilingTypeName`, portas/janelas, **`stairsTypeNames`** (`create_stairs`), **`structuralColumnTypeNames`** / **`architecturalColumnTypeNames`** (`create_pillar`), `sampleLoadableFamilyTypes`, etc.), **`planGeometryInActiveView`** em **vista de planta** (paredes/portas/janelas/rooms em metros; omitido em 3D — não impede operações que usam geometria da base de dados), **`footprintRepairHints`** (sugestões de `wallIds` por piso/teto para analyze/repair), **`revitOpsContextHints`** (notas curtas, ex.: repair em 3D), e notas gerais. |
 | **Contexto de seleção** | Seleciona elementos → **Incluir seleção** — JSON com elementos (parâmetros, nível, etc.). Inclui quando aplicável: **`floorIdsInSelection`**, **`ceilingIdsInSelection`**, **`roomIdsInSelection`**; para cada **Room** há campos como **`slabFromRoomPayload`** / **`ceilingFromRoomPayload`** (o assistente deve usar **`create_floor_from_room`** / **`create_ceiling_from_room`** por defeito). **Limpar seleção** remove o extra. |
 | **Aplicar mudanças no Revit** | Se a resposta do modelo incluir JSON com raiz `"revitOps": [ … ]` (muitas vezes dentro de um cercado de código Markdown com etiqueta `json`), o add-in **extrai**, corre as operações na thread do Revit (`ExternalEvent`) e mostra uma linha **`[Revit] …`** com resumo (sucessos/falhas e mensagens de log). |
 | **Histórico** | Todas as bolhas da janela entram no pedido ao LLM como turnos user/assistant (multimodal por turno quando há imagem na mensagem do utilizador). |
@@ -67,13 +83,15 @@ O prompt do assistente está alinhado com o seguinte:
 
 1. **Primeira opção:** **`create_floor_from_room`** / **`create_ceiling_from_room`** quando existir uma **Room** colocada e fechada no modelo — o Revit calcula o contorno (inclui paredes **curvas**). Usa o `roomId` do contexto (seleção, `roomIdsInSelection`, ou id explícito).
 2. **Só se não houver Room adequada** (ou o utilizador pedir geometria livre, laje fora de divisões, etc.): **`create_floor`** / **`create_ceiling`** com `boundary`, `boundarySegments` ou `circle` (metros).
+3. **Reparo:** se o `analyze_*_wall_footprint` tiver usado a **Room** como referência, **`repair_floor_to_room_footprint`** / **`repair_ceiling_to_room_footprint`** (`floorId`/`ceilingId` + `roomId`) é o caminho preferido para recriar a laje/teto alinhada à divisão; **`repair_*_to_wall_footprint`** continua útil quando a cadeia de paredes é a referência ou os hints o indicam.
 
 Isto evita pedir coordenadas manuais quando já existe divisão.
 
 ### Transacções e ops especiais
 
 - A maior parte das `revitOps` corre **numa única transação** Revit.
-- **`create_wall_roman_arch_profile`** e **`create_wall_custom_profile_void`** são exceções: **confirmam** a transação em curso, aplicam a edição de perfil da parede (incluindo `SketchEditScope` onde aplicável), **abrem nova transação** e seguem com as restantes entradas do array. Isto evita misturar estados inválidos com outras criações no mesmo lote.
+- **`create_wall_roman_arch_profile`**, **`create_wall_custom_profile_void`** e **`create_stairs`** são exceções: **confirmam** a transação em curso, executam a operação especial (perfil da parede ou escada em componentes), **abrem nova transação** e seguem com as restantes entradas do array. Isto evita misturar estados inválidos com outras criações no mesmo lote.
+- O alias **`create stairs`** (com espaço) é aceite e normalizado para `create_stairs`.
 
 ### Lista de operações `op` (referência rápida)
 
@@ -89,27 +107,34 @@ Cada entrada do array é um objeto com `"op"` e campos específicos (metros em X
 | `create_room` | Sala: centro ou `boundary` (polígono fechado); opcionais `name`, `levelName`. |
 | `create_door` / `create_window` | Porta/janela: `locationX/Y` ou `location`; opcionais `hostWallId`, `levelName`, tipo; há validação de proximidade em lote. |
 | **`create_floor_from_room`** | **Preferido para lajes por divisão:** `roomId` (ou `elementId` se for Room). Contorno = limite calculado da Room (arcos OK). Opcionais: `floorTypeName`, `name` (comentário), `boundaryLocation`: **`finish` (por defeito — faces de acabamento / interior da divisão)**, `center` (eixo da parede), `coreBoundary`, `coreCenter`. |
-| **`create_ceiling_from_room`** | Igual ao anterior para tetos; `ceilingTypeName` opcional. |
-| `create_floor` / `create_ceiling` | **Alternativa** quando não há Room: `boundary` [{x,y}, …], **ou** `boundarySegments` (line/arc), **ou** `circle`; opcionais `levelName`, tipo, `name`. |
-| `analyze_floor_wall_footprint` | Leitura: piso vs cadeia de paredes; log **curto** por defeito; opcional `includeJson:true`; opcional `wallIds` (usar `footprintRepairHints` em níveis “cheios”). |
+| **`create_ceiling_from_room`** | Igual ao anterior para tetos; `ceilingTypeName` opcional. Opcionais **`ceilingKind`**: `false_ceiling` (teto falso, por defeito) ou `slab_painted` / aliases como `laje`; **`falseCeilingDropMeters`** (queda do teto falso). |
+| `create_floor` / `create_ceiling` | **Alternativa** quando não há Room: `boundary` [{x,y}, …], **ou** `boundarySegments` (line/arc), **ou** `circle`; opcionais `levelName`, tipo, `name`. Em tetos: mesmos **`ceilingKind`** / **`falseCeilingDropMeters`** que `create_ceiling_from_room`. |
+| `analyze_floor_wall_footprint` | Leitura: com **Room** no modelo, métricas podem comparar laje vs limite da Room (opcionais `roomId`, `boundaryLocation`); senão, cadeia de paredes. Opcional `includeJson:true`, `wallIds`, tolerâncias. |
 | `repair_floor_to_wall_footprint` | Recria o piso a partir das curvas de parede; `wallIds` recomendado em níveis complexos; `alignTo`: `wall_centerline` / `wall_inside` / `wall_outside`. Falha de `Floor.Create` faz rollback (não apaga o piso antigo). |
-| `analyze_ceiling_wall_footprint` | Análogo ao piso para tetos. |
-| `repair_ceiling_to_wall_footprint` | Análogo ao reparo de piso; rollback seguro em falha. |
+| `repair_floor_to_room_footprint` | **Reparo preferido quando o analyze usou Room como referência** — `floorId`, `roomId`; opcional `boundaryLocation`. Recria como `create_floor_from_room`; rollback em falha. |
+| `analyze_ceiling_wall_footprint` | Análogo ao piso para tetos (inclui padrão Room-first quando aplicável). |
+| `repair_ceiling_to_wall_footprint` | Análogo ao reparo de piso por cadeia de paredes; rollback seguro em falha. |
+| `repair_ceiling_to_room_footprint` | `ceilingId`, `roomId`; opcional `boundaryLocation`; rollback em falha (equivalente a recriar teto a partir da Room). |
+| `change_ceiling_kind` | Alterar modo vertical do teto existente: `ceilingId` ou `elementId`; **`ceilingKind`** `false_ceiling` ou `slab_painted` (aliases aceites); opcional **`falseCeilingDropMeters`**. Recalcula offset face a paredes e vãos. |
 | `create_wall_opening` | Vão rectangular na parede (posição ao longo da parede ou rácio, dimensões). |
 | `create_wall_arch_opening` | Porta **família** em arco (agendas de portas); não confundir com furo só em perfil. |
 | `create_wall_roman_arch_profile` | **Arco romano** editando o **perfil** da parede recta (sem porta); ver `RevitWallArchProfileOps`. |
-| `create_wall_custom_profile_void` | **Buraco fechado** através da espessura (loop interior no sketch de perfil): `hostWallId`; `shape` com `kind` **star**, **regularPolygon**, **triangle**, **diamond**, **cross/plus**, **heart**, ou **`boundary`** com pontos `{ alongMeters, heightFromWallBaseMeters }`; vários vãos com `voids[]`. Arcos romanos aqui **não** — usar `create_wall_roman_arch_profile`. |
+| `create_wall_custom_profile_void` | **Buraco fechado** no perfil da parede (`hostWallId`). Suporta **`shape.kind`** paramétricos (ex.: **circle**, **ellipse**, **star**, **regularPolygon** / **polygon**, **triangle** / **isoscelesTriangle**, **diamond** / **rhombus**, **cross** / **plus**, **heart**) com campos de raio/lados/etc.; cadeia **`segments`** (line/arc/circle/ellipse) em **`boundary`**; silhuetas livres (**boundary** por pontos); **`voids[]`** para vários buracos. No código há ainda interpretação de formas “ricas” (slot, cápsula, squircle, etc.) via boundary/segmentos — ver `RevitWallCustomProfileVoidOps.cs`. Arco romano de parede: usar **`create_wall_roman_arch_profile`**, não esta op. |
 | `flip_wall` | Inverter face da parede (`elementId` ou `elementIds`). |
 | `create_family_instance` | Instância de família loadable: `familyTypeName`, posição; opcionais `levelName`, `rotationDegrees`. |
+| `create_pillar` | Coluna estrutural ou arquitectónica: **`pillarTypeName`** ou **`columnTypeName`** (deve coincidir com listas em `namedTypesForRevitOps`); posição em planta; opcionais nível/topo, altura, offsets, rotação, nome. |
 | `create_level` | Novo nível: `name`, `elevationMeters` (origem interna). |
 | `create_grid` | Eixo: `startX/Y`, `endX/Y`; opcionais `levelName`, nome do eixo. |
+| `create_stairs` | Escada recta em componentes entre dois níveis: `bottomLevelName` (ou `baseLevelName`), `topLevelName` (superior), trajecto em planta `startX/Y` → `endX/Y`; opcionais `stairsTypeName`, **`justification`**: `left` / `center` / `right`. |
 | `change_element_level` | Mudar nível de elementos; opcional `preserveWorldPosition` / `preservePosition` para manter XYZ. |
 | `change_level_preserve_position` | Igual mas **sempre** preserva posição no mundo. |
 
+Para o detalhe campo-a-campo (tolerâncias de footprint, regras de colocação, exemplos de JSON), o prompt de sistema em **`Chat/Services/LlmChatService.cs`** está alinhado com o executor e costuma estar mais completo que esta tabela resumida.
+
 ### Boas práticas e limitações
 
-- **Pisos/tetos:** com Room no modelo, preferir sempre **`create_*_from_room`**; `create_floor` manual é para vãos sem divisão ou pedidos explícitos de geometria livre.
-- Usa **nomes de tipo** que apareçam em `namedTypesForRevitOps` no contexto.
+- **Pisos/tetos:** com Room no modelo, preferir sempre **`create_*_from_room`**; `create_floor` manual é para vãos sem divisão ou pedidos explícitos de geometria livre. Após **`analyze_*_wall_footprint`** com referência a Room, preferir **`repair_*_to_room_footprint`** em vez de só `repair_*_to_wall_footprint` quando fizer sentido corrigir o contorno à divisão.
+- Usa **nomes de tipo** que apareçam em `namedTypesForRevitOps` no contexto (inclui listas para **`create_stairs`** e **`create_pillar`**).
 - **Não inventar** ids: preferir seleção, `roomIdsInSelection`, `footprintRepairHints` ou texto do contexto.
 - Vista **3D:** `planGeometryInActiveView` pode vir omitido — operações como repair/analyze de footprint e **`create_floor_from_room`** usam a geometria do **documento**, não da vista em planta.
 - Lotes **muito grandes** podem ser lentos ou falhar a meio; preferir poucas ops ou o fluxo **Sketch → BIM** para plantas completas.
@@ -119,9 +144,9 @@ Cada entrada do array é um objeto com `"op"` e campos específicos (metros em X
 
 | Área | Capacidades |
 | --- | --- |
-| **Sketch → BIM** | Imagem + LLM → paredes (retas/curvas), portas, rooms; pré-visualização; transação única no Revit. |
-| **Chat IA** | Conversa + contexto JSON + imagens; `revitOps`: parâmetros, apagar, selecionar, paredes, arcos, rooms, **pisos/tetos por Room ou geometria manual**, portas/janelas, vãos e perfis (arco romano, buracos no perfil), níveis, eixos, mudança de nível, análise/reparo de footprint. |
-| **TCP / MCP** | `create_house_from_sketch` encaminhado para a porta do RevitSketchPoC (`REVIT_SKETCH_PORT`). |
+| **Sketch → BIM** | Imagem + LLM → paredes (retas/curvas), rooms, portas, **janelas**, **pisos** (conforme interpretação e toggles `autoCreate*`); pré-visualização opcional (`showPreviewUi`); transação única no Revit. |
+| **Chat IA** | Conversa + contexto JSON + imagens; `revitOps`: parâmetros, apagar, selecionar, paredes, arcos, rooms, **pisos/tetos por Room ou geometria manual**, reparos **por parede ou por Room**, **`change_ceiling_kind`**, portas/janelas, **pilares**, **escadas**, vãos e perfis (arco romano, buracos no perfil), níveis, eixos, mudança de nível, análise/reparo de footprint. |
+| **TCP / MCP** | Apenas o método JSON-RPC **`create_house_from_sketch`** é suportado nesta porta; outros nomes de método devolvem erro. Alinha com `REVIT_SKETCH_PORT` / `TcpPort`. |
 | **PDF (Spike 1)** | Extração vetorial → JSON; pipeline opcional com LLM por tile (`Spike1/README.md`). |
 
 ---
@@ -168,7 +193,7 @@ Output esperado: `bin\Release\RevitSketchPoC.dll`
 2. Tab **Sketch AI PoC** → **Upload Sketch** (ou equivalente no ribbon).
 3. Escolhe a imagem do esboço / planta.
 4. Opcional: ativa **«Pré-visualizar antes de aplicar»** para comparar a imagem com o que o modelo interpretou antes de criar geometria.
-5. **Gerar modelo** — cria paredes, quartos (rooms) e portas conforme opções.
+5. **Gerar modelo** — aplica a interpretação (paredes, rooms, portas, **janelas** e **pisos** quando o JSON e os toggles `autoCreateWindows` / `autoCreateFloors` o permitirem).
 
 ## Spike 1 (UI dedicada)
 
@@ -226,9 +251,9 @@ Resumo no status do plugin:
 
 ## Teste via bridge Node (MCP)
 
-- Método TCP JSON-RPC exposto: **`create_house_from_sketch`**.
-- O servidor MCP encaminha essa tool para `REVIT_SKETCH_PORT`.
-- Garante que `TcpPort` no JSON coincide com essa porta.
+- Método TCP JSON-RPC suportado por este add-in: **`create_house_from_sketch`** apenas (`Integration/Routing/McpCommandRouter.cs`). Qualquer outro `method` na mesma ligação responde com erro **Unknown method**.
+- O servidor MCP Node encaminha essa tool para `REVIT_SKETCH_PORT`.
+- Garante que `TcpPort` em `pluginsettings.json` coincide com essa porta.
 
 ### Fluxo MCP + LLM (no Revit)
 
