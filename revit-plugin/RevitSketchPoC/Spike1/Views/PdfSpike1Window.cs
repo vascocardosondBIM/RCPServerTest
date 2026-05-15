@@ -19,9 +19,9 @@ namespace RevitSketchPoC.Spike1.Views
         {
             Title = "Spike 1 - PDF Vetorial para JSON";
             Width = 900;
-            Height = 680;
+            Height = 720;
             MinWidth = 700;
-            MinHeight = 520;
+            MinHeight = 620;
             ResizeMode = ResizeMode.CanResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Brushes.White;

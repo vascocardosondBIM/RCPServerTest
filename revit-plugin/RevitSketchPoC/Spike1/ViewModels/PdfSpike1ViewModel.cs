@@ -24,10 +24,12 @@ namespace RevitSketchPoC.Spike1.ViewModels
         private string? _status;
         private string? _generatedJsonPath;
         private string? _generatedJsonPreview;
+        private string? _currentJobId;
         private string? _cleanJsonPath;
         private string? _semanticReadyManifestPath;
         private string? _semanticPixelsPath;
         private string? _tilesDirectoryPath;
+        private string _selectedExecutionMode = JobExecutionMode.Auto;
         private string _selectedCalibrationMode = "AutoScale";
         private int _manualScaleDenominator = 100;
         private double _referenceP1XPt;
@@ -59,6 +61,7 @@ namespace RevitSketchPoC.Spike1.ViewModels
             };
             TileSizeOptions = new ObservableCollection<int> { 192, 256, 384, 512 };
             RasterDpiOptions = new ObservableCollection<int> { 200, 300, 400 };
+            ExecutionModeOptions = new ObservableCollection<string> { JobExecutionMode.Auto, JobExecutionMode.Guided };
             CalibrationModeOptions = new ObservableCollection<string> { "AutoScale", "ManualScale", "ReferencePoints" };
             _generateCommand = new RelayCommand(_ => RaiseGenerateRequested(), _ => CanGenerate());
             _runSemanticCommand = new RelayCommand(_ => RaiseRunSemanticRequested(), _ => CanRunSemantic());
@@ -141,6 +144,23 @@ namespace RevitSketchPoC.Spike1.ViewModels
         }
 
         public ObservableCollection<int> RasterDpiOptions { get; }
+
+        public ObservableCollection<string> ExecutionModeOptions { get; }
+
+        public string SelectedExecutionMode
+        {
+            get => _selectedExecutionMode;
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    return;
+                }
+
+                _selectedExecutionMode = value;
+                OnPropertyChanged();
+            }
+        }
 
         public ObservableCollection<string> CalibrationModeOptions { get; }
 
@@ -266,6 +286,16 @@ namespace RevitSketchPoC.Spike1.ViewModels
             set
             {
                 _generatedJsonPreview = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string? CurrentJobId
+        {
+            get => _currentJobId;
+            set
+            {
+                _currentJobId = value;
                 OnPropertyChanged();
             }
         }
@@ -448,6 +478,8 @@ namespace RevitSketchPoC.Spike1.ViewModels
 
             RunSemanticRequested?.Invoke(this, new SemanticTileInferenceRequest
             {
+                JobId = CurrentJobId ?? string.Empty,
+                ExecutionMode = SelectedExecutionMode,
                 CleanJsonPath = _cleanJsonPath ?? string.Empty,
                 SemanticReadyManifestPath = _semanticReadyManifestPath ?? string.Empty,
                 SemanticPixelsPath = _semanticPixelsPath ?? string.Empty,

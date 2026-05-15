@@ -55,6 +55,8 @@ namespace RevitSketchPoC.Sketch.Contracts
 
     public sealed class SemanticTileInferenceRequest
     {
+        public string JobId { get; set; } = string.Empty;
+        public string ExecutionMode { get; set; } = JobExecutionMode.Auto;
         public string CleanJsonPath { get; set; } = string.Empty;
         public string SemanticReadyManifestPath { get; set; } = string.Empty;
         public string SemanticPixelsPath { get; set; } = string.Empty;

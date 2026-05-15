@@ -374,8 +374,14 @@ namespace RevitSketchPoC.Chat.Services
                 frequency_penalty = 0.0,
                 presence_penalty = 0.0
             };
+            var extraBody = BuildNvidiaExtraBody(_settings);
+            var payloadBody = JObject.FromObject(body);
+            if (extraBody != null)
+            {
+                payloadBody["extra_body"] = JObject.FromObject(extraBody);
+            }
 
-            var json = JsonConvert.SerializeObject(body);
+            var json = JsonConvert.SerializeObject(payloadBody);
             using (var req = new HttpRequestMessage(HttpMethod.Post, url))
             {
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.NvidiaApiKey.Trim());
@@ -406,6 +412,25 @@ namespace RevitSketchPoC.Chat.Services
             }
 
             return u;
+        }
+
+        private static Dictionary<string, object>? BuildNvidiaExtraBody(PluginSettings settings)
+        {
+            var extraBody = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (settings.NvidiaEnableThinking)
+            {
+                extraBody["chat_template_kwargs"] = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "enable_thinking", true }
+                };
+            }
+
+            if (settings.NvidiaReasoningBudget > 0)
+            {
+                extraBody["reasoning_budget"] = settings.NvidiaReasoningBudget;
+            }
+
+            return extraBody.Count == 0 ? null : extraBody;
         }
 
         private static string ExtractOllamaAssistantContent(string payload)

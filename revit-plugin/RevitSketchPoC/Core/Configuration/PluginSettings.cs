@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Newtonsoft.Json;
 
 namespace RevitSketchPoC.Core.Configuration
@@ -24,6 +24,13 @@ namespace RevitSketchPoC.Core.Configuration
 
         /// <summary>Full chat-completions URL; vazio = <c>https://integrate.api.nvidia.com/v1/chat/completions</c>.</summary>
         public string NvidiaChatCompletionsUrl { get; set; } = string.Empty;
+
+        /// <summary>Enables provider reasoning/thinking mode when supported by the selected NVIDIA model.</summary>
+        public bool NvidiaEnableThinking { get; set; }
+
+        /// <summary>Optional reasoning budget passed to provider (0 = disabled/default).</summary>
+        public int NvidiaReasoningBudget { get; set; }
+
         public double DefaultWallHeightMeters { get; set; } = 3.0;
 
         /// <summary>Default railing type display name when <c>create_guardrail</c> omits <c>railingTypeName</c> (must still resolve uniquely in the project).</summary>
