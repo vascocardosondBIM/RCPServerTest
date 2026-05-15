@@ -7,7 +7,7 @@ using RevitSketchPoC.Integration.Routing;
 using RevitSketchPoC.RevitOperations.SketchBuild;
 using RevitSketchPoC.Sketch.Commands;
 using RevitSketchPoC.Sketch.Services;
-using RevitSketchPoC.Spike1.Commands;
+using RevitSketchPoC.Phase1_VectorExtraction.Commands;
 using System;
 using System.Globalization;
 using System.IO;
@@ -94,15 +94,15 @@ namespace RevitSketchPoC.App
                 assemblyPath,
                 typeof(LlmChatExternalCommand).FullName);
 
-            var spike1ButtonData = new PushButtonData(
-                "PdfSpike1Button",
-                "Spike 1\nPDF->JSON",
+            var phase1ButtonData = new PushButtonData(
+                "Phase1VectorExtractionButton",
+                "Fase 1\nPDF Extract",
                 assemblyPath,
-                typeof(PdfSpike1ExternalCommand).FullName);
+                typeof(Phase1VectorExtractionExternalCommand).FullName);
 
             var sketchButton = panel.AddItem(pushButtonData) as PushButton;
             var chatButton = panel.AddItem(chatButtonData) as PushButton;
-            var spike1Button = panel.AddItem(spike1ButtonData) as PushButton;
+            var phase1Button = panel.AddItem(phase1ButtonData) as PushButton;
 
             if (sketchButton != null)
             {
@@ -116,10 +116,10 @@ namespace RevitSketchPoC.App
                 chatButton.Image = CreateMonogramIcon("AI", Colors.MediumSeaGreen, 16);
             }
 
-            if (spike1Button != null)
+            if (phase1Button != null)
             {
-                spike1Button.LargeImage = CreateMonogramIcon("P1", Colors.IndianRed, 32);
-                spike1Button.Image = CreateMonogramIcon("P1", Colors.IndianRed, 16);
+                phase1Button.LargeImage = CreateMonogramIcon("P1", Colors.IndianRed, 32);
+                phase1Button.Image = CreateMonogramIcon("P1", Colors.IndianRed, 16);
             }
         }
 

@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -33,15 +34,22 @@
   <ItemGroup>
     <Page Remove="Sketch\Views\SketchUploadWindow.xaml" />
     <Page Remove="Chat\Views\LlmChatWindow.xaml" />
-    <Page Remove="Spike1\Views\PdfSpike1Window.xaml" />
+    <Page Remove="Phase1_VectorExtraction\Views\Phase1VectorExtractionWindow.xaml" />
     <EmbeddedResource Include="Sketch\Views\SketchUploadWindow.xaml">
       <LogicalName>RevitSketchPoC.Sketch.Views.SketchUploadWindow.xaml</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Chat\Views\LlmChatWindow.xaml">
       <LogicalName>RevitSketchPoC.Chat.Views.LlmChatWindow.xaml</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Spike1\Views\PdfSpike1Window.xaml">
-      <LogicalName>RevitSketchPoC.Spike1.Views.PdfSpike1Window.xaml</LogicalName>
+    <EmbeddedResource Include="Phase1_VectorExtraction\Views\Phase1VectorExtractionWindow.xaml">
+      <LogicalName>RevitSketchPoC.Phase1_VectorExtraction.Views.Phase1VectorExtractionWindow.xaml</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Phase1_VectorExtraction\Scripts\phase1_extract.py">
+      <LogicalName>RevitSketchPoC.Phase1_VectorExtraction.Scripts.phase1_extract.py</LogicalName>
+    </EmbeddedResource>
+    <Content Include="Phase1_VectorExtraction\Scripts\phase1_extract.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Phase1_VectorExtraction\Scripts\phase1_extract.py</Link>
+    </Content>
   </ItemGroup>
 </Project>

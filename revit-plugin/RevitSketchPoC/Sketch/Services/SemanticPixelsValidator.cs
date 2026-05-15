@@ -15,7 +15,8 @@ namespace RevitSketchPoC.Sketch.Services
     /// </summary>
     public static class SemanticPixelsValidator
     {
-        private const string SchemaVersion = "semantic_pixels.v1";
+        private const string SchemaVersionV1 = "semantic_pixels.v1";
+        private const string SchemaVersionV2 = "semantic_pixels.v2";
 
         public static SemanticPixelsValidationResult ValidateTemplate(string semanticPixelsPath, string semanticReadyManifestPath)
         {
@@ -48,10 +49,12 @@ namespace RevitSketchPoC.Sketch.Services
         private static SemanticPixelsValidationResult ValidateDocument(JObject semanticRoot, JObject manifestRoot, int? expectedPage)
         {
             var schema = semanticRoot["schema"]?.ToString();
-            if (!string.Equals(schema, SchemaVersion, StringComparison.Ordinal))
+            if (!string.Equals(schema, SchemaVersionV1, StringComparison.Ordinal) &&
+                !string.Equals(schema, SchemaVersionV2, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "semantic_pixels schema inválido. Esperado \"" + SchemaVersion + "\" e recebido \"" + (schema ?? "<null>") + "\".");
+                    "semantic_pixels schema inválido. Esperado \"" + SchemaVersionV1 + "\" ou \"" +
+                    SchemaVersionV2 + "\" e recebido \"" + (schema ?? "<null>") + "\".");
             }
 
             var detectionsToken = semanticRoot["detections"];
@@ -119,7 +122,7 @@ namespace RevitSketchPoC.Sketch.Services
 
             return new SemanticPixelsValidationResult
             {
-                Schema = SchemaVersion,
+                Schema = schema ?? SchemaVersionV1,
                 TotalDetections = total,
                 UniqueTiles = tileIds.Count,
                 UniquePages = pages.Count,

@@ -1,4 +1,4 @@
-using RevitSketchPoC.Spike1.ViewModels;
+using RevitSketchPoC.Phase1_VectorExtraction.ViewModels;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -7,27 +7,28 @@ using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace RevitSketchPoC.Spike1.Views
+namespace RevitSketchPoC.Phase1_VectorExtraction.Views
 {
-    public sealed class PdfSpike1Window : Window
+    public sealed class Phase1VectorExtractionWindow : Window
     {
-        private const string LayoutResourceName = "RevitSketchPoC.Spike1.Views.PdfSpike1Window.xaml";
+        private const string LayoutResourceName =
+            "RevitSketchPoC.Phase1_VectorExtraction.Views.Phase1VectorExtractionWindow.xaml";
 
-        public PdfSpike1ViewModel ViewModel { get; }
+        public Phase1VectorExtractionViewModel ViewModel { get; }
 
-        public PdfSpike1Window()
+        public Phase1VectorExtractionWindow()
         {
-            Title = "Spike 1 - PDF Vetorial para JSON";
-            Width = 900;
-            Height = 680;
-            MinWidth = 700;
-            MinHeight = 520;
+            Title = "Fase 1 — Raw JSON (PDF)";
+            Width = 920;
+            Height = 700;
+            MinWidth = 720;
+            MinHeight = 540;
             ResizeMode = ResizeMode.CanResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Brushes.White;
             FontFamily = new FontFamily("Segoe UI");
 
-            ViewModel = new PdfSpike1ViewModel();
+            ViewModel = new Phase1VectorExtractionViewModel();
             DataContext = ViewModel;
             Content = LoadLayoutFromXaml();
             Closing += OnClosingWhileBusy;
@@ -40,7 +41,7 @@ namespace RevitSketchPoC.Spike1.Views
             var root = XamlReader.Load(stream);
             if (root is not UIElement element)
             {
-                throw new InvalidOperationException("PdfSpike1Window.xaml root must be a UIElement.");
+                throw new InvalidOperationException("Phase1VectorExtractionWindow.xaml root must be a UIElement.");
             }
 
             return element;
@@ -49,26 +50,19 @@ namespace RevitSketchPoC.Spike1.Views
         private static Stream OpenLayoutStream(Assembly asm, string logicalName)
         {
             var stream = asm.GetManifestResourceStream(logicalName);
-            if (stream != null)
-            {
-                return stream;
-            }
+            if (stream != null) return stream;
 
             foreach (var name in asm.GetManifestResourceNames())
             {
-                if (name.EndsWith("PdfSpike1Window.xaml", StringComparison.OrdinalIgnoreCase))
+                if (name.EndsWith("Phase1VectorExtractionWindow.xaml", StringComparison.OrdinalIgnoreCase))
                 {
                     stream = asm.GetManifestResourceStream(name);
-                    if (stream != null)
-                    {
-                        return stream;
-                    }
+                    if (stream != null) return stream;
                 }
             }
 
             throw new InvalidOperationException(
-                "Embedded XAML not found. Expected manifest resource \"" + logicalName + "\". " +
-                "Available: " + string.Join(", ", asm.GetManifestResourceNames()));
+                "Embedded XAML not found. Expected \"" + logicalName + "\".");
         }
 
         private void OnClosingWhileBusy(object? sender, CancelEventArgs e)
@@ -76,7 +70,7 @@ namespace RevitSketchPoC.Spike1.Views
             if (ViewModel.IsBusy)
             {
                 e.Cancel = true;
-                ViewModel.AppendStatus("Aguarda a geração de JSON terminar antes de fechar.");
+                ViewModel.AppendStatus("Aguarda a extração terminar antes de fechar.");
             }
         }
     }

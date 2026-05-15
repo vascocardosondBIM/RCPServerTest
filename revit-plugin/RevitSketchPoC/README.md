@@ -149,7 +149,7 @@ Para o detalhe campo-a-campo (tolerâncias de footprint, regras de colocação, 
 | **Sketch → BIM** | Imagem + LLM → paredes (retas/curvas), rooms, portas, **janelas**, **pisos** (conforme interpretação e toggles `autoCreate*`); pré-visualização opcional (`showPreviewUi`); transação única no Revit. |
 | **Chat IA** | Conversa + contexto JSON + imagens; `revitOps`: parâmetros, apagar, selecionar, paredes, arcos, rooms, **pisos/tetos por Room ou geometria manual**, reparos **por parede ou por Room**, **`change_ceiling_kind`**, portas/janelas, **pilares**, **vigas** (`create_beam`), **guarda-corpo** (`create_guardrail`), **escadas**, vãos e perfis (arco romano, buracos no perfil), níveis, eixos, mudança de nível, análise/reparo de footprint. |
 | **TCP / MCP** | Apenas o método JSON-RPC **`create_house_from_sketch`** é suportado nesta porta; outros nomes de método devolvem erro. Alinha com `REVIT_SKETCH_PORT` / `TcpPort`. |
-| **PDF (Spike 1)** | Extração vetorial → JSON; pipeline opcional com LLM por tile (`Spike1/README.md`). |
+| **PDF (Fase 1)** | UI **Fase 1 PDF Extract**: gera só **`raw.json`** (vetor + texto via PyMuPDF). Ver `Phase1_VectorExtraction/README.md`. |
 
 ---
 
@@ -197,47 +197,37 @@ Output esperado: `bin\Release\RevitSketchPoC.dll`
 4. Opcional: ativa **«Pré-visualizar antes de aplicar»** para comparar a imagem com o que o modelo interpretou antes de criar geometria.
 5. **Gerar modelo** — aplica a interpretação (paredes, rooms, portas, **janelas** e **pisos** quando o JSON e os toggles `autoCreateWindows` / `autoCreateFloors` o permitirem).
 
-## Spike 1 (UI dedicada)
+## Fase 1 — Raw JSON (`raw.json`)
 
-1. Tab **Sketch AI PoC** → **Spike 1 PDF->JSON**.
-2. Seleciona o PDF vetorial.
-3. Define a página (`1` = primeira).
-4. (Opcional) escolhe preset de qualidade (`Rápido`, `Balanceado`, `Alta precisão`) ou ajusta `tile_size_pt` / `raster_dpi`.
-5. Clica **Gerar JSON PDF** para extrair geometrias/texto sem IA.
-6. Artefactos gerados: `raw`, `clean`, `semantic_ready_manifest`, `semantic_pixels` e `tiles`.
-7. (Opcional) Clica **Executar Spike 2 (LLM)** para inferência semântica por tile usando o provider configurado.
-8. O contrato `semantic_pixels.v1` é validado automaticamente e o matching geométrico (snap bbox -> clean) é aplicado.
-9. A calibração explícita converte para coordenada real e gera `*_semantic_real_world.json`.
-10. Clica **Guardar JSON…** para exportar o ficheiro gerado.
+1. Tab **Sketch AI PoC** → **Fase 1 PDF Extract**.
+2. Seleciona o PDF e a página (base 1).
+3. Clica **Gerar raw.json** — corre Python no `%TEMP%` e cria uma pasta com **`raw.json`** apenas (`get_drawings` + `get_text('words')`).
+4. Usa **Abrir pasta output**, **Exportar todo o output…** ou **Guardar raw…** para copiar o ficheiro.
 
-### Spike 2 (semântico por tile, integrado na mesma janela)
+Nota: raster, `clean.json`, manifest e pipeline LLM por tile estão em pausa até reintroduzimos passo a passo.
+
+<details>
+<summary>Documentação antiga (pipeline completo — em pausa)</summary>
+
+1. Tab **Sketch AI PoC** → **Fase 1 PDF Extract**.
+2. …preset tile/DPI, clean, tiles, inferência LLM — ver histórico git / versões anteriores.
+
+</details>
+
+### Spike 2 (semântico por tile — em pausa na UI)
+
+- O botão de inferência LLM está oculto enquanto a Fase 1 só gera `raw.json`.
+
+<details>
+<summary>Comportamento anterior (referência)</summary>
 
 - Botão: **Executar Spike 2 (LLM)**.
-- Provider usado: definido em `pluginsettings.json` (`LlmProvider`).
-- Processamento:
-  1. inferência de cada tile no modelo vision;
-  2. validação de schema (`semantic_pixels.v1`);
-  3. matching geométrico com snap para `clean.json`;
-  4. calibração explícita para metros (`AutoScale`, `ManualScale`, `ReferencePoints`).
+- Provider: `pluginsettings.json`.
+- Artefactos: `semantic_pixels`, `semantic_real_world`, métricas, etc.
 
-Notas de calibração:
+</details>
 
-- `AutoScale` tenta ler `1:N` no texto da planta;
-- `ManualScale` usa a escala informada no UI;
-- `ReferencePoints` usa dois pontos conhecidos e distância real em metros.
-
-Artefato final atualizado:
-
-- `*_semantic_pixels.json` (deteções + metadados de matching).
-- `*_semantic_real_world.json` (deteções em coordenada real consistente).
-- `*_semantic_metrics.json` (precision/unmatched/calibration error + contagens).
-
-Resumo no status do plugin:
-
-- `tiles`, `detections`, `snapped`, `unmatched`.
-
-> [!NOTE]
-> A documentação detalhada da base entregue para continuidade do Spike 2 (arquivos-chave, contrato e artefatos) está em `Spike1/README.md`, seção **Base pronta para o colega (Spike 2)**.
+> Documentação da Fase 1: `Phase1_VectorExtraction/README.md`.
 
 > [!TIP]
 > Se enviares PDF no upload da UI/MCP, o plugin converte automaticamente a 1ª página para PNG antes de chamar o LLM.

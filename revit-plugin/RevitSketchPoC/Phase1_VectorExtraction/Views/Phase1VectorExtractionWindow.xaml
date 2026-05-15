@@ -110,11 +110,11 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="Spike 1 - PDF Vetorial para JSON"
+                    <TextBlock Text="Fase 1 — Raw JSON (vetor + texto)"
                                FontSize="22"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource Brush.Text}" />
-                    <TextBlock Text="Extrai geometria vetorial bruta (linhas, curvas, retângulos e texto) sem interpretação por IA."
+                    <TextBlock Text="Neste passo gera-se apenas raw.json (get_drawings + get_text words). Sem raster, clean nem LLM. Tile/DPI abaixo ignorados por agora."
                                FontSize="13"
                                Foreground="{StaticResource Brush.TextMuted}"
                                TextWrapping="Wrap"
@@ -127,25 +127,20 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="90" />
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
-                             Height="40"
-                             IsReadOnly="True"
+                    <TextBox Grid.Column="0" Height="40" IsReadOnly="True"
                              Text="{Binding PdfPath, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Grid.Column="1"
-                            Style="{StaticResource SecondaryButton}"
-                            Margin="10,0,10,0"
+                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Margin="10,0,10,0"
                             Command="{Binding BrowsePdfCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="📄" FontSize="18" Margin="0,0,6,0" />
                             <TextBlock Text="Procurar PDF…" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <TextBox Grid.Column="2"
-                             Height="40"
+                    <TextBox Grid.Column="2" Height="40"
                              Text="{Binding PdfPageNumber, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
 
-                <Grid Grid.Row="2" Margin="0,0,0,8">
+                <Grid Grid.Row="2" Margin="0,0,0,8" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="20" />
@@ -153,51 +148,41 @@
                         <ColumnDefinition Width="20" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-
                     <StackPanel Grid.Column="0">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Preset" />
-                        <ComboBox Height="36"
-                                  ItemsSource="{Binding QualityPresetOptions}"
+                        <ComboBox Height="36" ItemsSource="{Binding QualityPresetOptions}"
                                   SelectedItem="{Binding SelectedQualityPreset, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
-
                     <StackPanel Grid.Column="2">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Tile Size (pt)" />
-                        <ComboBox Height="36"
-                                  ItemsSource="{Binding TileSizeOptions}"
+                        <ComboBox Height="36" ItemsSource="{Binding TileSizeOptions}"
                                   SelectedItem="{Binding SelectedTileSizePt, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
-
                     <StackPanel Grid.Column="4">
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="Raster DPI" />
-                        <ComboBox Height="36"
-                                  ItemsSource="{Binding RasterDpiOptions}"
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="AI Raster DPI" />
+                        <ComboBox Height="36" ItemsSource="{Binding RasterDpiOptions}"
                                   SelectedItem="{Binding SelectedRasterDpi, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
                 </Grid>
 
-                <Grid Grid.Row="3" Margin="0,0,0,8">
+                <Grid Grid.Row="3" Margin="0,0,0,8" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="20" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-
                     <StackPanel Grid.Column="0">
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="Calibração" />
-                        <ComboBox Height="36"
-                                  ItemsSource="{Binding CalibrationModeOptions}"
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="Calibração (pós-Fase 1)" />
+                        <ComboBox Height="36" ItemsSource="{Binding CalibrationModeOptions}"
                                   SelectedItem="{Binding SelectedCalibrationMode, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
-
                     <StackPanel Grid.Column="2">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Escala manual (1:N)" />
-                        <TextBox Height="36"
-                                 Text="{Binding ManualScaleDenominator, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Height="36" Text="{Binding ManualScaleDenominator, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
                 </Grid>
 
-                <Grid Grid.Row="4" Margin="0,0,0,8">
+                <Grid Grid.Row="4" Margin="0,0,0,8" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="10" />
@@ -216,70 +201,50 @@
                     <TextBox Grid.Column="8" Height="34" Text="{Binding ReferenceDistanceMeters, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
 
-                <TextBox Grid.Row="5"
-                         MinHeight="70"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         AcceptsReturn="True"
-                         VerticalScrollBarVisibility="Auto"
-                         FontFamily="Consolas"
-                         FontSize="12"
-                         Foreground="{StaticResource Brush.Status}"
-                         Background="#FFFFFBFE"
-                         BorderBrush="#FFFECACA"
+                <TextBox Grid.Row="5" MinHeight="70" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"
+                         Foreground="{StaticResource Brush.Status}" Background="#FFFFFBFE" BorderBrush="#FFFECACA"
                          Text="{Binding Status}" />
 
-                <TextBox Grid.Row="6"
-                         Margin="0,12,0,0"
-                         MinHeight="220"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         AcceptsReturn="True"
-                         VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"
-                         FontFamily="Consolas"
-                         FontSize="11"
-                         Foreground="{StaticResource Brush.Text}"
-                         Background="#FFF8FAFC"
-                         Text="{Binding GeneratedJsonPreview}" />
+                <TextBox Grid.Row="6" Margin="0,12,0,0" MinHeight="220" IsReadOnly="True" TextWrapping="Wrap"
+                         AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Brush.Text}"
+                         Background="#FFF8FAFC" Text="{Binding GeneratedJsonPreview}" />
 
-                <StackPanel Grid.Row="7"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            Margin="0,18,0,0">
-                    <Button Style="{StaticResource PrimaryButton}"
-                            MinWidth="180"
-                            Margin="0,0,10,0"
+                <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                    <Button Style="{StaticResource PrimaryButton}" MinWidth="200" Margin="0,0,10,0"
                             Command="{Binding GenerateJsonCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🧩" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Gerar JSON PDF" VerticalAlignment="Center" />
+                            <TextBlock Text="Gerar raw.json" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource PrimaryButton}"
-                            MinWidth="210"
-                            Margin="0,0,10,0"
-                            Command="{Binding RunSemanticCommand}">
+                    <Button Style="{StaticResource PrimaryButton}" MinWidth="220" Margin="0,0,10,0"
+                            Command="{Binding RunSemanticCommand}"
+                            Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🧠" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Executar Spike 2 (LLM)" VerticalAlignment="Center" />
+                            <TextBlock Text="Inferência semântica (LLM)" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource SecondaryButton}"
-                            MinWidth="200"
-                            Margin="0,0,10,0"
+                    <Button Style="{StaticResource SecondaryButton}" MinWidth="200" Margin="0,0,10,0"
                             Command="{Binding OpenFolderCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="📂" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Abrir pasta dos JSONs" VerticalAlignment="Center" />
+                            <TextBlock Text="Abrir pasta output" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource SecondaryButton}"
-                            MinWidth="150"
-                            Command="{Binding SaveJsonCommand}">
+                    <Button Style="{StaticResource SecondaryButton}" MinWidth="220" Margin="0,0,10,0"
+                            Command="{Binding ExportAllOutputsCommand}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📦" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Exportar todo o output…" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource SecondaryButton}" MinWidth="150" Command="{Binding SaveJsonCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="💾" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Guardar JSON…" VerticalAlignment="Center" />
+                            <TextBlock Text="Guardar raw…" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
