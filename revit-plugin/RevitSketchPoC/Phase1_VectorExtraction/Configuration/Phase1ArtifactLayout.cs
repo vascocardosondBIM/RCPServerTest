@@ -25,6 +25,8 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Configuration
         public const string RasterTilesDir = "raster/tiles";
         public const string SemanticManifest = "semantic/semantic_ready_manifest.json";
         public const string SemanticPixels = "semantic/semantic_pixels.json";
+        public const string PageRegionsFileName = "page_regions.json";
+        public const string RegionsRootDir = "regions";
 
         public static string RawPackagedRelative(string runBase) =>
             Path.Combine("raw", runBase + "_raw.json");

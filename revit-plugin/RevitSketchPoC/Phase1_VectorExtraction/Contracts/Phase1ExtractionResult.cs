@@ -16,6 +16,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Contracts
         public string SemanticPixelsPath { get; set; } = string.Empty;
         public string TilesDirectoryPath { get; set; } = string.Empty;
         public string ProjectJsonPath { get; set; } = string.Empty;
+        public string PreviewPngPath { get; set; } = string.Empty;
         public string ParquetDirectoryPath { get; set; } = string.Empty;
         public string CleanJsonPreview { get; set; } = string.Empty;
     }

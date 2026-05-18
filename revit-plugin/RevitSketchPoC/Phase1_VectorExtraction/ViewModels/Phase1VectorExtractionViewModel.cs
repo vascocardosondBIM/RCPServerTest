@@ -4,11 +4,14 @@ using RevitSketchPoC.Phase1_VectorExtraction.Configuration;
 using RevitSketchPoC.Phase1_VectorExtraction.Contracts;
 using RevitSketchPoC.Sketch.Contracts;
 using RevitSketchPoC.Phase1_VectorExtraction.Services.Export;
+using RevitSketchPoC.Phase1_VectorExtraction.Services.Regions;
+using RevitSketchPoC.Phase1_VectorExtraction.Views;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
@@ -44,6 +47,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
         private readonly RelayCommand _saveCommand;
         private readonly RelayCommand _openFolderCommand;
         private readonly RelayCommand _exportAllCommand;
+        private readonly RelayCommand _openRegionsCommand;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         public event EventHandler<Phase1ExtractionRequest>? ExtractRequested;
@@ -66,6 +70,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             _saveCommand = new RelayCommand(_ => SaveGeneratedJson(), _ => CanSave());
             _openFolderCommand = new RelayCommand(_ => OpenOutputFolder(), _ => CanOpenFolder());
             _exportAllCommand = new RelayCommand(_ => ExportAllGeneratedFiles(), _ => CanExportAll());
+            _openRegionsCommand = new RelayCommand(_ => OpenRegionEditor(), _ => CanOpenRegionEditor());
         }
 
         public string? PdfPath
@@ -92,6 +97,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
                 _saveCommand.RaiseCanExecuteChanged();
                 _openFolderCommand.RaiseCanExecuteChanged();
                 _exportAllCommand.RaiseCanExecuteChanged();
+                _openRegionsCommand.RaiseCanExecuteChanged();
             }
         }
 
@@ -166,6 +172,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
         public ICommand SaveJsonCommand => _saveCommand;
         public ICommand OpenFolderCommand => _openFolderCommand;
         public ICommand ExportAllOutputsCommand => _exportAllCommand;
+        public ICommand OpenRegionEditorCommand => _openRegionsCommand;
 
         public void AppendStatus(string line)
         {
@@ -186,6 +193,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             _runSemanticCommand.RaiseCanExecuteChanged();
             _openFolderCommand.RaiseCanExecuteChanged();
             _exportAllCommand.RaiseCanExecuteChanged();
+            _openRegionsCommand.RaiseCanExecuteChanged();
         }
 
         /// <summary>
@@ -212,6 +220,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             _runSemanticCommand.RaiseCanExecuteChanged();
             _openFolderCommand.RaiseCanExecuteChanged();
             _exportAllCommand.RaiseCanExecuteChanged();
+            _openRegionsCommand.RaiseCanExecuteChanged();
         }
 
         private void BrowsePdf()
@@ -230,9 +239,39 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             IndexJsonPath = null;
             _runSemanticCommand.RaiseCanExecuteChanged();
             _exportAllCommand.RaiseCanExecuteChanged();
+            _openRegionsCommand.RaiseCanExecuteChanged();
         }
 
         private bool CanGenerate() => !IsBusy && !string.IsNullOrWhiteSpace(PdfPath) && File.Exists(PdfPath!);
+
+        private bool CanOpenRegionEditor() =>
+            !IsBusy &&
+            !string.IsNullOrWhiteSpace(_outputRootPath) &&
+            Directory.Exists(_outputRootPath) &&
+            File.Exists(Path.Combine(_outputRootPath, Phase1ArtifactLayout.PreviewPagePngRelative()));
+
+        private void OpenRegionEditor()
+        {
+            if (!CanOpenRegionEditor())
+            {
+                AppendStatus("Gera a Fase 1 primeiro (precisas de raster/preview/page.png).");
+                return;
+            }
+
+            try
+            {
+                var editor = new Phase1RegionEditorWindow(_outputRootPath!);
+                editor.Owner = System.Windows.Application.Current?.Windows
+                    .OfType<Phase1VectorExtractionWindow>()
+                    .FirstOrDefault();
+                editor.ShowDialog();
+                AppendStatus("Editor de zonas fechado.");
+            }
+            catch (Exception ex)
+            {
+                AppendStatus("Não foi possível abrir o editor de zonas: " + ex.Message);
+            }
+        }
 
         private void RaiseExtractRequested()
         {

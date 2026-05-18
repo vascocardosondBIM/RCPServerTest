@@ -18,7 +18,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
 
         public Phase1VectorExtractionWindow()
         {
-            Title = "Fase 1 — Raw JSON (PDF)";
+            Title = "Fase 1 — Extração PDF + zonas";
             Width = 920;
             Height = 700;
             MinWidth = 720;

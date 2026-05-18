@@ -47,6 +47,26 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Commands
                                 window.ViewModel.AppendStatus("RAW: " + result.RawJsonPath);
                                 window.ViewModel.AppendStatus("CLEAN: " + result.CleanJsonPath);
                                 window.ViewModel.IsBusy = false;
+
+                                if (!string.IsNullOrWhiteSpace(result.PreviewPngPath) &&
+                                    System.IO.File.Exists(result.PreviewPngPath))
+                                {
+                                    window.ViewModel.AppendStatus(
+                                        "Abre «Definir zonas…» para recortar desenho vs. legendas no preview.");
+                                    try
+                                    {
+                                        var editor = new Phase1RegionEditorWindow(result.OutputRoot)
+                                        {
+                                            Owner = window
+                                        };
+                                        editor.ShowDialog();
+                                    }
+                                    catch (Exception regionEx)
+                                    {
+                                        window.ViewModel.AppendStatus(
+                                            "Editor de zonas: " + regionEx.Message);
+                                    }
+                                }
                             });
                         }
                         catch (Exception ex)

@@ -25,6 +25,16 @@ python -m pip install pymupdf
 
 Timeout no plugin: **20 minutos** (a extração só vetor costuma ser rápida).
 
+## Zonas da folha (desenho vs. legendas)
+
+1. **Gerar Fase 1** — cria `raster/preview/page.png` e JSON modular.
+2. Abre o **editor de zonas** (automaticamente após gerar, ou botão **Definir zonas…**).
+3. Arrasta retângulos sobre o preview (ou preset **2 colunas**).
+4. **Exportar zonas** — grava `page_regions.json` e, por zona, em `regions/{id}/`:
+   - `page.png` (recorte)
+   - `geometry/*`, `text/*`, `topology/*` filtrados
+   - `clean_slice.json`
+
 ## Exportar
 
-O botão **Exportar todo o output…** copia a pasta da corrida (neste passo, sobretudo `raw.json`).
+O botão **Exportar todo o output…** copia a pasta da corrida (JSON, raster, `regions/`, etc.).

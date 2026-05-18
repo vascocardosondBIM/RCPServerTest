@@ -110,11 +110,11 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="Fase 1 — Raw JSON (vetor + texto)"
+                    <TextBlock Text="Fase 1 — Extração PDF + zonas"
                                FontSize="22"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource Brush.Text}" />
-                    <TextBlock Text="Neste passo gera-se apenas raw.json (get_drawings + get_text words). Sem raster, clean nem LLM. Tile/DPI abaixo ignorados por agora."
+                    <TextBlock Text="Gera JSON modular e preview PNG. Depois define zonas (desenho, legendas, …) sobre o preview e exporta PNG + JSON filtrado por zona."
                                FontSize="13"
                                Foreground="{StaticResource Brush.TextMuted}"
                                TextWrapping="Wrap"
@@ -216,7 +216,14 @@
                             Command="{Binding GenerateJsonCommand}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🧩" FontSize="18" Margin="0,0,6,0" />
-                            <TextBlock Text="Gerar raw.json" VerticalAlignment="Center" />
+                            <TextBlock Text="Gerar Fase 1" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryButton}" MinWidth="200" Margin="0,0,10,0"
+                            Command="{Binding OpenRegionEditorCommand}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="✂️" FontSize="18" Margin="0,0,6,0" />
+                            <TextBlock Text="Definir zonas…" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource PrimaryButton}" MinWidth="220" Margin="0,0,10,0"

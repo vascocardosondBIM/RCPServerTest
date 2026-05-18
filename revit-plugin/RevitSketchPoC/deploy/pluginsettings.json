@@ -4,7 +4,7 @@
   "OllamaModel": "gemma4:31b-cloud",
   "GeminiApiKey": "",
   "GeminiModel": "gemini-2.0-flash",
-  "LlmProvider": "Nvidia",
+  "LlmProvider": "Ollama",
   "NvidiaApiKey": "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",
   "NvidiaModel": "openai/gpt-oss-120b",
   "NvidiaChatCompletionsUrl": "https://integrate.api.nvidia.com/v1/chat/completions",
