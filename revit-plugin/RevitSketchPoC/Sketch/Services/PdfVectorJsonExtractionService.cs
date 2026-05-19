@@ -40,6 +40,7 @@ namespace RevitSketchPoC.Sketch.Services
                 UltraRasterDpi = Math.Max(rasterDpi, 400)
             });
 
+            var summary = Phase1ExtractionSummaryService.BuildFromOutputRoot(phase1.OutputRoot);
             return new PdfVectorJsonExtractionResult
             {
                 RawJsonPath = phase1.RawJsonPath,
@@ -47,7 +48,7 @@ namespace RevitSketchPoC.Sketch.Services
                 SemanticReadyManifestPath = phase1.SemanticReadyManifestPath,
                 SemanticPixelsPath = phase1.SemanticPixelsPath,
                 TilesDirectoryPath = phase1.TilesDirectoryPath,
-                CleanJsonPreview = phase1.CleanJsonPreview,
+                CleanJsonPreview = Phase1ExtractionSummaryService.FormatAsText(summary),
                 OutputRoot = phase1.OutputRoot,
                 TopologyJsonPath = phase1.TopologyJsonPath,
                 ProjectJsonPath = phase1.ProjectJsonPath

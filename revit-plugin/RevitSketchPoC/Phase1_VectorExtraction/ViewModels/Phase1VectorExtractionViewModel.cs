@@ -3,6 +3,7 @@ using RevitSketchPoC.Core.ViewModels;
 using RevitSketchPoC.Phase1_VectorExtraction.Configuration;
 using RevitSketchPoC.Phase1_VectorExtraction.Contracts;
 using RevitSketchPoC.Sketch.Contracts;
+using RevitSketchPoC.Phase1_VectorExtraction.Services;
 using RevitSketchPoC.Phase1_VectorExtraction.Services.Export;
 using RevitSketchPoC.Phase1_VectorExtraction.Services.Regions;
 using RevitSketchPoC.Phase1_VectorExtraction.Views;
@@ -24,7 +25,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
         private bool _isBusy;
         private string? _status;
         private string? _generatedJsonPath;
-        private string? _generatedJsonPreview;
+        private string? _extractionSummary;
         private string? _cleanJsonPath;
         private string? _semanticReadyManifestPath;
         private string? _semanticPixelsPath;
@@ -164,7 +165,8 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
         public string? GeneratedJsonPath { get => _generatedJsonPath; set { _generatedJsonPath = value; OnPropertyChanged(); _saveCommand.RaiseCanExecuteChanged(); _openFolderCommand.RaiseCanExecuteChanged(); } }
         /// <summary><c>phase1_index.json</c> no output root (mapa modular).</summary>
         public string? IndexJsonPath { get => _indexJsonPath; set { _indexJsonPath = value; OnPropertyChanged(); } }
-        public string? GeneratedJsonPreview { get => _generatedJsonPreview; set { _generatedJsonPreview = value; OnPropertyChanged(); } }
+        /// <summary>Resumo de contagens (PDF completo + zonas).</summary>
+        public string? ExtractionSummary { get => _extractionSummary; set { _extractionSummary = value; OnPropertyChanged(); } }
 
         public ICommand BrowsePdfCommand => new RelayCommand(_ => BrowsePdf());
         public ICommand GenerateJsonCommand => _generateCommand;
@@ -180,7 +182,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             Status = string.IsNullOrWhiteSpace(Status) ? line.Trim() : Status + Environment.NewLine + line.Trim();
         }
 
-        public void SetRawOnlyResult(string outputRoot, string rawJsonPath, string preview)
+        public void SetRawOnlyResult(string outputRoot, string rawJsonPath)
         {
             _outputRootPath = outputRoot;
             _cleanJsonPath = null;
@@ -189,7 +191,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             _tilesDirectoryPath = null;
             IndexJsonPath = null;
             GeneratedJsonPath = rawJsonPath;
-            GeneratedJsonPreview = preview;
+            RefreshExtractionSummary();
             _runSemanticCommand.RaiseCanExecuteChanged();
             _openFolderCommand.RaiseCanExecuteChanged();
             _exportAllCommand.RaiseCanExecuteChanged();
@@ -206,8 +208,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             string cleanJsonPath,
             string semanticReadyManifestPath,
             string semanticPixelsPath,
-            string tilesDirectoryPath,
-            string preview)
+            string tilesDirectoryPath)
         {
             _outputRootPath = outputRoot;
             _cleanJsonPath = cleanJsonPath;
@@ -215,12 +216,31 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             _semanticPixelsPath = semanticPixelsPath;
             _tilesDirectoryPath = tilesDirectoryPath;
             GeneratedJsonPath = rawJsonPath;
-            GeneratedJsonPreview = preview;
             IndexJsonPath = indexJsonPath;
+            RefreshExtractionSummary();
             _runSemanticCommand.RaiseCanExecuteChanged();
             _openFolderCommand.RaiseCanExecuteChanged();
             _exportAllCommand.RaiseCanExecuteChanged();
             _openRegionsCommand.RaiseCanExecuteChanged();
+        }
+
+        public void RefreshExtractionSummary()
+        {
+            if (string.IsNullOrWhiteSpace(_outputRootPath) || !Directory.Exists(_outputRootPath))
+            {
+                ExtractionSummary = null;
+                return;
+            }
+
+            try
+            {
+                var summary = Phase1ExtractionSummaryService.BuildFromOutputRoot(_outputRootPath);
+                ExtractionSummary = Phase1ExtractionSummaryService.FormatAsText(summary);
+            }
+            catch (Exception ex)
+            {
+                ExtractionSummary = "Não foi possível gerar o resumo: " + ex.Message;
+            }
         }
 
         private void BrowsePdf()
@@ -230,7 +250,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
             PdfPath = dialog.FileName;
             Status = null;
             GeneratedJsonPath = null;
-            GeneratedJsonPreview = null;
+            ExtractionSummary = null;
             _cleanJsonPath = null;
             _semanticReadyManifestPath = null;
             _semanticPixelsPath = null;
@@ -265,7 +285,15 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
                     .OfType<Phase1VectorExtractionWindow>()
                     .FirstOrDefault();
                 editor.ShowDialog();
-                AppendStatus("Editor de zonas fechado.");
+                if (editor.RegionsWereExported)
+                {
+                    RefreshExtractionSummary();
+                    AppendStatus("Resumo actualizado com contagens por zona.");
+                }
+                else
+                {
+                    AppendStatus("Editor de zonas fechado.");
+                }
             }
             catch (Exception ex)
             {

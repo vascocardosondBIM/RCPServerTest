@@ -40,8 +40,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Commands
                                     result.CleanJsonPath,
                                     result.SemanticReadyManifestPath,
                                     result.SemanticPixelsPath,
-                                    result.TilesDirectoryPath,
-                                    result.CleanJsonPreview);
+                                    result.TilesDirectoryPath);
                                 window.ViewModel.AppendStatus("Output: " + result.OutputRoot);
                                 window.ViewModel.AppendStatus("INDEX: " + result.IndexJsonPath);
                                 window.ViewModel.AppendStatus("RAW: " + result.RawJsonPath);
@@ -60,6 +59,10 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Commands
                                             Owner = window
                                         };
                                         editor.ShowDialog();
+                                        if (editor.RegionsWereExported)
+                                        {
+                                            window.ViewModel.RefreshExtractionSummary();
+                                        }
                                     }
                                     catch (Exception regionEx)
                                     {

@@ -57,8 +57,6 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services
             SemanticPixelsValidator.ValidateTemplate(resolved.SemanticPixelsPath, resolved.SemanticReadyManifestPath);
 
             var rawPath = Path.Combine(outputRoot, Phase1ArtifactLayout.RawRootLegacy);
-            string previewPath = File.Exists(resolved.CleanJsonPath) ? resolved.CleanJsonPath : rawPath;
-            var preview = PythonProcessRunner.ReadTextPreview(previewPath, 30000);
             var tilesDir = Path.Combine(outputRoot, Phase1ArtifactLayout.RasterTilesDir);
             var previewPng = Path.Combine(outputRoot, Phase1ArtifactLayout.PreviewPagePngRelative());
 
@@ -74,8 +72,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services
                 SemanticPixelsPath = resolved.SemanticPixelsPath,
                 TilesDirectoryPath = tilesDir,
                 ProjectJsonPath = resolved.ProjectJsonPath,
-                PreviewPngPath = File.Exists(previewPng) ? previewPng : string.Empty,
-                CleanJsonPreview = preview
+                PreviewPngPath = File.Exists(previewPng) ? previewPng : string.Empty
             };
         }
     }

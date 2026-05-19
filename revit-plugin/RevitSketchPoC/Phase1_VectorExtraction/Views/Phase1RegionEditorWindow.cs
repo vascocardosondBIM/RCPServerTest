@@ -1,4 +1,5 @@
 using RevitSketchPoC.Phase1_VectorExtraction.Contracts;
+using RevitSketchPoC.Phase1_VectorExtraction.Services;
 using RevitSketchPoC.Phase1_VectorExtraction.Services.Regions;
 using System;
 using System.Collections.Generic;
@@ -33,6 +34,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         private readonly ListBox _regionList;
         private readonly TextBlock _hintText;
         private readonly TextBlock _statusText;
+        private readonly TextBox _summaryBox;
         private readonly Grid _surface;
         private readonly Image _image;
         private readonly Canvas _overlay;
@@ -40,6 +42,9 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         private Point? _dragStart;
         private Rectangle? _rubberBand;
         private int _regionCounter;
+
+        /// <summary>True se o utilizador exportou zonas nesta sessão (para refrescar o resumo na janela principal).</summary>
+        public bool RegionsWereExported { get; private set; }
 
         public Phase1RegionEditorWindow(string outputRoot)
         {
@@ -130,6 +135,26 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             side.Children.Add(MakeButton("Preset: 2 colunas (≈65% / 35%)", (_, _) => OnPresetTwoColumns()));
             side.Children.Add(MakeButton("Remover zona seleccionada", (_, _) => OnRemoveSelected()));
             side.Children.Add(MakeButton("Limpar todas", (_, _) => OnClearAll()));
+            side.Children.Add(new TextBlock
+            {
+                Text = "Resumo (após exportar)",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 12, 0, 6),
+                FontSize = 12
+            });
+            _summaryBox = new TextBox
+            {
+                Height = 200,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11,
+                Background = new SolidColorBrush(Color.FromRgb(248, 250, 252))
+            };
+            side.Children.Add(_summaryBox);
+            TryShowFullPageSummary();
             Grid.SetColumn(side, 1);
             body.Children.Add(side);
 
@@ -452,14 +477,17 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
                 };
 
                 var result = PageRegionExportService.Export(request);
+                RegionsWereExported = true;
                 SetStatus(
                     "Exportação concluída: " + result.RegionIds.Count + " zonas, " +
                     result.TotalEntitiesExported + " entidades filtradas. " +
                     result.PageRegionsJsonPath);
 
+                TryShowFullPageSummary();
+
                 MessageBox.Show(
                     "Zonas exportadas para:\n" + System.IO.Path.Combine(_outputRoot, Configuration.Phase1ArtifactLayout.RegionsRootDir) +
-                    "\n\nÍndice: page_regions.json",
+                    "\n\nÍndice: page_regions.json\n\nVê o resumo no painel à direita.",
                     "Zonas",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -467,6 +495,19 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             catch (Exception ex)
             {
                 SetStatus("Falha na exportação: " + ex.Message);
+            }
+        }
+
+        private void TryShowFullPageSummary()
+        {
+            try
+            {
+                var summary = Phase1ExtractionSummaryService.BuildFromOutputRoot(_outputRoot);
+                _summaryBox.Text = Phase1ExtractionSummaryService.FormatAsText(summary);
+            }
+            catch (Exception ex)
+            {
+                _summaryBox.Text = "Resumo indisponível: " + ex.Message;
             }
         }
 
