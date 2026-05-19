@@ -59,7 +59,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Commands
                                             Owner = window
                                         };
                                         editor.ShowDialog();
-                                        if (editor.RegionsWereExported)
+                                        if (editor.RegionsWereExported || editor.ColorLayersWereExported)
                                         {
                                             window.ViewModel.RefreshExtractionSummary();
                                         }

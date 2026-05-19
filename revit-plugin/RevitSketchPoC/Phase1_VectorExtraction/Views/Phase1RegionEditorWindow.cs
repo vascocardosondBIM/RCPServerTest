@@ -46,6 +46,9 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         /// <summary>True se o utilizador exportou zonas nesta sessão (para refrescar o resumo na janela principal).</summary>
         public bool RegionsWereExported { get; private set; }
 
+        /// <summary>True após exportação por cor (PNG PyMuPDF por pasta).</summary>
+        public bool ColorLayersWereExported { get; private set; }
+
         public Phase1RegionEditorWindow(string outputRoot)
         {
             _outputRoot = outputRoot ?? throw new ArgumentNullException(nameof(outputRoot));
@@ -135,6 +138,8 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             side.Children.Add(MakeButton("Preset: 2 colunas (≈65% / 35%)", (_, _) => OnPresetTwoColumns()));
             side.Children.Add(MakeButton("Remover zona seleccionada", (_, _) => OnRemoveSelected()));
             side.Children.Add(MakeButton("Limpar todas", (_, _) => OnClearAll()));
+            side.Children.Add(MakeButton("Exportar por cor (zona seleccionada)", (_, _) => OnExportSelectedByColor()));
+            side.Children.Add(MakeButton("Exportar por cor (todas as zonas)", (_, _) => OnExportAllByColor()));
             side.Children.Add(new TextBlock
             {
                 Text = "Resumo (após exportar)",
@@ -453,6 +458,77 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
                 offY + norm[1] * dispH,
                 (norm[2] - norm[0]) * dispW,
                 (norm[3] - norm[1]) * dispH);
+        }
+
+        private void OnExportSelectedByColor()
+        {
+            if (_regionList.SelectedItem is not RegionRow row)
+            {
+                SetStatus("Selecciona uma zona na lista.");
+                return;
+            }
+
+            try
+            {
+                SetStatus("A exportar PNG por cor (PyMuPDF) para «" + row.Label + "»…");
+                var bboxPt = BboxNormToPt(row.BboxNorm);
+                var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt);
+                ColorLayersWereExported = true;
+                RegionsWereExported = true;
+                SetStatus(
+                    "Por cor: " + result.ColorHexKeys.Count + " cores em " + result.ByColorRoot);
+                TryShowFullPageSummary();
+                MessageBox.Show(
+                    "Exportadas " + result.ColorHexKeys.Count + " cores.\n" + result.ByColorRoot,
+                    "Exportar por cor",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Falha exportação por cor: " + ex.Message);
+            }
+        }
+
+        private void OnExportAllByColor()
+        {
+            if (_regions.Count == 0)
+            {
+                SetStatus("Define pelo menos uma zona.");
+                return;
+            }
+
+            try
+            {
+                var totalColors = 0;
+                foreach (var row in _regions.ToList())
+                {
+                    SetStatus("Por cor: «" + row.Label + "»…");
+                    var bboxPt = BboxNormToPt(row.BboxNorm);
+                    var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt);
+                    totalColors += result.ColorHexKeys.Count;
+                }
+
+                ColorLayersWereExported = true;
+                RegionsWereExported = true;
+                SetStatus("Por cor concluído: " + totalColors + " pastas de cor no total.");
+                TryShowFullPageSummary();
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Falha exportação por cor: " + ex.Message);
+            }
+        }
+
+        private double[] BboxNormToPt(double[] norm)
+        {
+            return new[]
+            {
+                norm[0] * _dims.WidthPt,
+                norm[1] * _dims.HeightPt,
+                norm[2] * _dims.WidthPt,
+                norm[3] * _dims.HeightPt
+            };
         }
 
         private void OnExport(object sender, RoutedEventArgs e)

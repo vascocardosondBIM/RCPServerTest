@@ -47,9 +47,16 @@
     <EmbeddedResource Include="Phase1_VectorExtraction\Scripts\phase1_extract.py">
       <LogicalName>RevitSketchPoC.Phase1_VectorExtraction.Scripts.phase1_extract.py</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Phase1_VectorExtraction\Scripts\phase1_export_zone_by_color.py">
+      <LogicalName>RevitSketchPoC.Phase1_VectorExtraction.Scripts.phase1_export_zone_by_color.py</LogicalName>
+    </EmbeddedResource>
     <Content Include="Phase1_VectorExtraction\Scripts\phase1_extract.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>Phase1_VectorExtraction\Scripts\phase1_extract.py</Link>
+    </Content>
+    <Content Include="Phase1_VectorExtraction\Scripts\phase1_export_zone_by_color.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Phase1_VectorExtraction\Scripts\phase1_export_zone_by_color.py</Link>
     </Content>
   </ItemGroup>
 </Project>

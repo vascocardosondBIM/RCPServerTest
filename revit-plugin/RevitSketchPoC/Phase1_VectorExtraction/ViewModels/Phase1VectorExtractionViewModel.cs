@@ -285,10 +285,10 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.ViewModels
                     .OfType<Phase1VectorExtractionWindow>()
                     .FirstOrDefault();
                 editor.ShowDialog();
-                if (editor.RegionsWereExported)
+                if (editor.RegionsWereExported || editor.ColorLayersWereExported)
                 {
                     RefreshExtractionSummary();
-                    AppendStatus("Resumo actualizado com contagens por zona.");
+                    AppendStatus("Resumo actualizado (zonas e/ou camadas por cor).");
                 }
                 else
                 {

@@ -38,6 +38,10 @@ Após **Gerar Fase 1**, o ecrã mostra **contagens** (linhas, polilinhas, retân
    - `page.png` (recorte)
    - `geometry/*`, `text/*`, `topology/*` filtrados
    - `clean_slice.json`
+5. **Exportar por cor** (editor de zonas) — por zona seleccionada ou todas:
+   - **Render fiel** da zona (`get_pixmap` clip, DPI 300) + **máscara por pixel** (tolerância RGB ~32)
+   - Inclui texto, imagens, hachuras e traços finos que o replay vectorial não captava
+   - Saída: `regions/{id}/by_color/zone_full_render.png`, `by_color/{RRGGBB}/page.png`, JSON filtrado, `by_color_manifest.json` (`schema`: `phase1.zone_by_color.v3`, `render_mode`: `pixel_mask`)
 
 ## Exportar
 
