@@ -27,7 +27,7 @@ Timeout no plugin: **20 minutos** (a extração só vetor costuma ser rápida).
 
 ## Resumo na UI
 
-Após **Gerar Fase 1**, o ecrã mostra **contagens** (linhas, polilinhas, retângulos, hatches, words, blocos, spans, clean) em vez de preview JSON. Depois de exportar zonas, o resumo inclui **PDF completo** e **cada zona** em `regions/{id}/`.
+Após **Gerar Fase 1**, o ecrã mostra **contagens** (linhas, polilinhas, retângulos, hatches, words, blocos, spans, clean) e **cores distintas** (traço/preenchimento da geometria, com top cores por nº de entidades) em vez de preview JSON. Depois de exportar zonas, o resumo inclui **PDF completo** e **cada zona** em `regions/{id}/`.
 
 ## Zonas da folha (desenho vs. legendas)
 

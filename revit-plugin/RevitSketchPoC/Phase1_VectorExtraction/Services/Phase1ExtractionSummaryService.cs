@@ -11,6 +11,17 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services
 {
     public static class Phase1ExtractionSummaryService
     {
+        private static readonly string[] GeometryColorScanFiles =
+        {
+            Phase1ArtifactLayout.GeometryLines,
+            Phase1ArtifactLayout.GeometryPolylines,
+            Phase1ArtifactLayout.GeometryBeziers,
+            "geometry/rectangles.json",
+            Phase1ArtifactLayout.GeometryHatches
+        };
+
+        private const int MaxColorsListed = 16;
+
         public static Phase1ExtractionSummary BuildFromOutputRoot(string outputRoot)
         {
             if (string.IsNullOrWhiteSpace(outputRoot) || !Directory.Exists(outputRoot))
@@ -99,6 +110,44 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services
             }
 
             sb.Append(indent).Append("Total entidades (modular): ").AppendLine(c.GrandTotal.ToString());
+            AppendColorBlock(sb, c.Colors, indent);
+        }
+
+        private static void AppendColorBlock(StringBuilder sb, Phase1ColorStatistics colors, string indent)
+        {
+            if (colors.DistinctCombined == 0 && colors.StrokeColors.Count == 0 && colors.FillColors.Count == 0)
+            {
+                sb.Append(indent).AppendLine("Cores (geometria): nenhuma cor distinta detectada em style.*");
+                return;
+            }
+
+            sb.Append(indent).AppendLine("Cores (geometria — stroke/fill em entities):");
+            sb.Append(indent).Append("  Cores distintas (traço): ").AppendLine(colors.DistinctStrokeColors.ToString());
+            sb.Append(indent).Append("  Cores distintas (preenchimento): ").AppendLine(colors.DistinctFillColors.ToString());
+            sb.Append(indent).Append("  Cores distintas (união): ").AppendLine(colors.DistinctCombined.ToString());
+
+            AppendColorList(sb, colors.StrokeColors, indent, "traço");
+            AppendColorList(sb, colors.FillColors, indent, "preenchimento");
+        }
+
+        private static void AppendColorList(StringBuilder sb, List<Phase1ColorUsage> list, string indent, string kind)
+        {
+            if (list.Count == 0)
+            {
+                return;
+            }
+
+            sb.Append(indent).Append("  Top ").Append(kind).Append(':').AppendLine();
+            foreach (var u in list)
+            {
+                sb.Append(indent).Append("    ").Append(u.Hex).Append(" (").Append(u.RgbLabel).Append("): ")
+                    .Append(u.EntityCount).AppendLine(" entidades");
+            }
+
+            if (list.Count >= MaxColorsListed)
+            {
+                sb.Append(indent).AppendLine("    … (lista limitada a " + MaxColorsListed + " cores)");
+            }
         }
 
         private static Phase1ElementCounts CountModularArtifacts(string baseDir)
@@ -114,9 +163,151 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services
                 TextBlocks = CountJsonArray(baseDir, Phase1ArtifactLayout.TextBlocks),
                 TextSpans = CountJsonArray(baseDir, Phase1ArtifactLayout.TextSpans),
                 Intersections = CountJsonArray(baseDir, Phase1ArtifactLayout.TopologyIntersections, "intersections"),
-                Adjacency = CountJsonArray(baseDir, Phase1ArtifactLayout.TopologyAdjacency, "adjacency")
+                Adjacency = CountJsonArray(baseDir, Phase1ArtifactLayout.TopologyAdjacency, "adjacency"),
+                Colors = CollectGeometryColors(baseDir)
             };
             return c;
+        }
+
+        private static Phase1ColorStatistics CollectGeometryColors(string baseDir)
+        {
+            var strokeMap = new Dictionary<string, int>(StringComparer.Ordinal);
+            var fillMap = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            foreach (var rel in GeometryColorScanFiles)
+            {
+                ScanGeometryFileColors(baseDir, rel, strokeMap, fillMap);
+            }
+
+            var combined = new HashSet<string>(strokeMap.Keys, StringComparer.Ordinal);
+            foreach (var k in fillMap.Keys)
+            {
+                combined.Add(k);
+            }
+
+            return new Phase1ColorStatistics
+            {
+                DistinctStrokeColors = strokeMap.Count,
+                DistinctFillColors = fillMap.Count,
+                DistinctCombined = combined.Count,
+                StrokeColors = ToSortedUsageList(strokeMap),
+                FillColors = ToSortedUsageList(fillMap)
+            };
+        }
+
+        private static void ScanGeometryFileColors(
+            string baseDir,
+            string relativePath,
+            Dictionary<string, int> strokeMap,
+            Dictionary<string, int> fillMap)
+        {
+            var path = Path.Combine(baseDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(path))
+            {
+                return;
+            }
+
+            try
+            {
+                var root = JObject.Parse(File.ReadAllText(path));
+                var key = ResolveEntitiesKey(root);
+                if (key == null || root[key] is not JArray entities)
+                {
+                    return;
+                }
+
+                foreach (var token in entities)
+                {
+                    if (token is not JObject entity)
+                    {
+                        continue;
+                    }
+
+                    if (entity["style"] is not JObject style)
+                    {
+                        continue;
+                    }
+
+                    if (TryRgbKey(style["stroke_color"], out var strokeKey))
+                    {
+                        strokeMap[strokeKey] = strokeMap.TryGetValue(strokeKey, out var n) ? n + 1 : 1;
+                    }
+
+                    if (TryRgbKey(style["fill_color"], out var fillKey))
+                    {
+                        fillMap[fillKey] = fillMap.TryGetValue(fillKey, out var n) ? n + 1 : 1;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private static List<Phase1ColorUsage> ToSortedUsageList(Dictionary<string, int> map)
+        {
+            return map
+                .OrderByDescending(kv => kv.Value)
+                .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+                .Take(MaxColorsListed)
+                .Select(kv => ToUsage(kv.Key, kv.Value))
+                .ToList();
+        }
+
+        private static Phase1ColorUsage ToUsage(string rgbKey, int count)
+        {
+            var parts = rgbKey.Split(',');
+            var r = int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture);
+            var g = int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+            var b = int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture);
+            return new Phase1ColorUsage
+            {
+                RgbKey = rgbKey,
+                Hex = "#" + r.ToString("X2") + g.ToString("X2") + b.ToString("X2"),
+                RgbLabel = "rgb " + r + "," + g + "," + b,
+                EntityCount = count
+            };
+        }
+
+        private static bool TryRgbKey(JToken? token, out string key)
+        {
+            key = string.Empty;
+            if (token is not JArray arr || arr.Count < 3)
+            {
+                return false;
+            }
+
+            if (arr[0].Type == JTokenType.Null || arr[1].Type == JTokenType.Null || arr[2].Type == JTokenType.Null)
+            {
+                return false;
+            }
+
+            var v0 = arr[0]!.Value<double>();
+            var v1 = arr[1]!.Value<double>();
+            var v2 = arr[2]!.Value<double>();
+
+            var scale = v0 <= 1.0 && v1 <= 1.0 && v2 <= 1.0 && v0 >= 0 && v1 >= 0 && v2 >= 0 ? 255.0 : 1.0;
+            var r = ClampByte(v0 * scale);
+            var g = ClampByte(v1 * scale);
+            var b = ClampByte(v2 * scale);
+            key = r + "," + g + "," + b;
+            return true;
+        }
+
+        private static int ClampByte(double v)
+        {
+            if (v < 0)
+            {
+                return 0;
+            }
+
+            if (v > 255)
+            {
+                return 255;
+            }
+
+            return (int)Math.Round(v);
         }
 
         private static int CountJsonArray(string baseDir, string relativePath, string? arrayKey = null)

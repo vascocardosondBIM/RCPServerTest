@@ -20,9 +20,9 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         {
             Title = "Fase 1 — Extração PDF + zonas";
             Width = 920;
-            Height = 700;
+            Height = 780;
             MinWidth = 720;
-            MinHeight = 540;
+            MinHeight = 600;
             ResizeMode = ResizeMode.CanResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Brushes.White;

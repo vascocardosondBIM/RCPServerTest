@@ -16,10 +16,28 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Contracts
         public int Adjacency { get; set; }
         public int CleanLines { get; set; }
         public int CleanRectangles { get; set; }
+        public Phase1ColorStatistics Colors { get; set; } = new Phase1ColorStatistics();
 
         public int GeometryTotal => Lines + Polylines + Beziers + Rectangles + Hatches;
         public int TextTotal => Words + TextBlocks + TextSpans;
         public int GrandTotal => GeometryTotal + TextTotal + Intersections + Adjacency;
+    }
+
+    public sealed class Phase1ColorUsage
+    {
+        public string RgbKey { get; set; } = string.Empty;
+        public string Hex { get; set; } = string.Empty;
+        public string RgbLabel { get; set; } = string.Empty;
+        public int EntityCount { get; set; }
+    }
+
+    public sealed class Phase1ColorStatistics
+    {
+        public int DistinctStrokeColors { get; set; }
+        public int DistinctFillColors { get; set; }
+        public int DistinctCombined { get; set; }
+        public List<Phase1ColorUsage> StrokeColors { get; set; } = new List<Phase1ColorUsage>();
+        public List<Phase1ColorUsage> FillColors { get; set; } = new List<Phase1ColorUsage>();
     }
 
     public sealed class Phase1RegionSummary
