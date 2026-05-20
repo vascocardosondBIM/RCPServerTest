@@ -11,6 +11,7 @@ Requer: pip install pymupdf
 """
 import json
 import os
+import shutil
 import sys
 import datetime
 
@@ -19,7 +20,40 @@ import fitz
 DEFAULT_DPI = 300
 DEFAULT_TOLERANCE = 32
 MAX_COLOR_GROUPS = 48
-WHITE_THRESHOLD = 248
+DEFAULT_PRESET = 'balanced'
+DEFAULT_WHITE_THRESHOLD = 248
+DEFAULT_WHITE_LUMA_THRESHOLD = 242
+DEFAULT_WHITE_CHROMA_SPREAD = 18
+DEFAULT_MIN_COLOR_PIXELS = 64
+DEFAULT_MIN_COLOR_COVERAGE = 0.00035
+DEFAULT_MIN_JSON_ENTITIES = 1
+
+COLOR_PRESETS = {
+    'conservative': {
+        'white_threshold': 250,
+        'white_luma_threshold': 247,
+        'white_chroma_spread': 14,
+        'min_color_pixels': 36,
+        'min_color_coverage': 0.0002,
+        'min_json_entities': 1,
+    },
+    'balanced': {
+        'white_threshold': DEFAULT_WHITE_THRESHOLD,
+        'white_luma_threshold': DEFAULT_WHITE_LUMA_THRESHOLD,
+        'white_chroma_spread': DEFAULT_WHITE_CHROMA_SPREAD,
+        'min_color_pixels': DEFAULT_MIN_COLOR_PIXELS,
+        'min_color_coverage': DEFAULT_MIN_COLOR_COVERAGE,
+        'min_json_entities': DEFAULT_MIN_JSON_ENTITIES,
+    },
+    'aggressive': {
+        'white_threshold': 245,
+        'white_luma_threshold': 236,
+        'white_chroma_spread': 22,
+        'min_color_pixels': 120,
+        'min_color_coverage': 0.0007,
+        'min_json_entities': 2,
+    },
+}
 
 
 def r(v):
@@ -53,8 +87,17 @@ def rgb_dist_sq(r1, g1, b1, r2, g2, b2):
     return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
 
 
-def is_near_white(r, g, b, threshold=WHITE_THRESHOLD):
+def is_near_white(r, g, b, threshold):
     return r >= threshold and g >= threshold and b >= threshold
+
+
+def is_background_like_color(r, g, b, white_threshold, white_luma_threshold, white_chroma_spread):
+    if is_near_white(r, g, b, white_threshold):
+        return True
+    # Treat high-luma low-chroma tones as background-ish (off-white paper/noise).
+    luma = int(0.2126 * r + 0.7152 * g + 0.0722 * b)
+    spread = max(r, g, b) - min(r, g, b)
+    return luma >= white_luma_threshold and spread <= white_chroma_spread
 
 
 def derotated_to_raw(x, y, rotation, width, height):
@@ -97,7 +140,14 @@ def render_zone_pixmap(page, clip_rect, dpi):
     return page.get_pixmap(dpi=dpi, clip=clip, alpha=False)
 
 
-def collect_colors_from_pixmap(pix, tolerance, max_colors=MAX_COLOR_GROUPS):
+def collect_colors_from_pixmap(
+    pix,
+    tolerance,
+    max_colors,
+    white_threshold,
+    white_luma_threshold,
+    white_chroma_spread,
+):
     """Agrupa cores visíveis no render da zona (amostragem + clustering)."""
     w, h, n = pix.width, pix.height, pix.n
     if n < 3:
@@ -126,7 +176,7 @@ def collect_colors_from_pixmap(pix, tolerance, max_colors=MAX_COLOR_GROUPS):
         for x in range(0, w, step):
             i = (row + x) * n
             r, g, b = samples[i], samples[i + 1], samples[i + 2]
-            if is_near_white(r, g, b):
+            if is_background_like_color(r, g, b, white_threshold, white_luma_threshold, white_chroma_spread):
                 continue
             assign(r, g, b)
 
@@ -181,6 +231,7 @@ def save_color_mask_png(source_pix, target_rgb, tolerance, dest_path, bg=(255, 2
     src = source_pix.samples
     out = bytearray(w * h * 3)
     br, bgc, bb = bg
+    matched = 0
 
     for y in range(h):
         row_off = y * w
@@ -192,6 +243,7 @@ def save_color_mask_png(source_pix, target_rgb, tolerance, dest_path, bg=(255, 2
                 out[o] = r
                 out[o + 1] = g
                 out[o + 2] = b
+                matched += 1
             else:
                 out[o] = br
                 out[o + 1] = bgc
@@ -201,6 +253,50 @@ def save_color_mask_png(source_pix, target_rgb, tolerance, dest_path, bg=(255, 2
     os.makedirs(os.path.dirname(dest_path) or '.', exist_ok=True)
     mask_pix.save(dest_path)
     mask_pix = None
+    return matched
+
+
+def compute_color_priority_score(coverage, json_count):
+    coverage_score = min(1.0, max(0.0, coverage) * 900.0)
+    json_score = min(1.0, max(0, json_count) / 40.0)
+    return round(coverage_score * 0.65 + json_score * 0.35, 6)
+
+
+def resolve_runtime_settings(
+    preset_name,
+    min_color_pixels,
+    min_color_coverage,
+    min_json_entities,
+    white_threshold,
+    white_luma_threshold,
+    white_chroma_spread,
+):
+    key = (preset_name or DEFAULT_PRESET).strip().lower()
+    if key == 'conservador':
+        key = 'conservative'
+    elif key == 'balanceado':
+        key = 'balanced'
+    elif key == 'agressivo':
+        key = 'aggressive'
+    if key not in COLOR_PRESETS:
+        key = DEFAULT_PRESET
+
+    cfg = dict(COLOR_PRESETS[key])
+    if min_color_pixels is not None:
+        cfg['min_color_pixels'] = max(1, int(min_color_pixels))
+    if min_color_coverage is not None:
+        cfg['min_color_coverage'] = max(0.0, float(min_color_coverage))
+    if min_json_entities is not None:
+        cfg['min_json_entities'] = max(0, int(min_json_entities))
+    if white_threshold is not None:
+        cfg['white_threshold'] = max(0, min(255, int(white_threshold)))
+    if white_luma_threshold is not None:
+        cfg['white_luma_threshold'] = max(0, min(255, int(white_luma_threshold)))
+    if white_chroma_spread is not None:
+        cfg['white_chroma_spread'] = max(0, min(255, int(white_chroma_spread)))
+
+    cfg['preset'] = key
+    return cfg
 
 
 def color_matches_hex_key(stroke_key, fill_key, hex_key, tolerance):
@@ -273,7 +369,9 @@ def main():
     if len(sys.argv) < 11:
         print(
             'Uso: phase1_export_zone_by_color.py <pdf> <out_dir> <page> '
-            '<x0> <y0> <x1> <y1> <rotation> <width_pt> <height_pt> [dpi] [tolerance]',
+            '<x0> <y0> <x1> <y1> <rotation> <width_pt> <height_pt> [dpi] [tolerance] '
+            '[preset] [min_pixels] [min_coverage] [min_json_entities] '
+            '[white_threshold] [white_luma] [white_chroma]',
             file=sys.stderr,
         )
         sys.exit(2)
@@ -287,6 +385,23 @@ def main():
     height_pt = float(sys.argv[10])
     dpi = int(sys.argv[11]) if len(sys.argv) > 11 else DEFAULT_DPI
     tolerance = int(sys.argv[12]) if len(sys.argv) > 12 else DEFAULT_TOLERANCE
+    preset = sys.argv[13] if len(sys.argv) > 13 else DEFAULT_PRESET
+    min_color_pixels = int(sys.argv[14]) if len(sys.argv) > 14 else None
+    min_color_coverage = float(sys.argv[15]) if len(sys.argv) > 15 else None
+    min_json_entities = int(sys.argv[16]) if len(sys.argv) > 16 else None
+    white_threshold = int(sys.argv[17]) if len(sys.argv) > 17 else None
+    white_luma_threshold = int(sys.argv[18]) if len(sys.argv) > 18 else None
+    white_chroma_spread = int(sys.argv[19]) if len(sys.argv) > 19 else None
+
+    settings = resolve_runtime_settings(
+        preset,
+        min_color_pixels,
+        min_color_coverage,
+        min_json_entities,
+        white_threshold,
+        white_luma_threshold,
+        white_chroma_spread,
+    )
 
     os.makedirs(out_dir, exist_ok=True)
     doc = fitz.open(pdf_path)
@@ -312,14 +427,40 @@ def main():
             for k in color_keys_for_drawing(d):
                 drawing_keys.add(k)
 
-    pixmap_keys = collect_colors_from_pixmap(zone_pix, tolerance)
-    all_keys = list(drawing_keys) + [k for k in pixmap_keys if k not in drawing_keys]
+    pixmap_keys = collect_colors_from_pixmap(
+        zone_pix,
+        tolerance,
+        MAX_COLOR_GROUPS,
+        settings['white_threshold'],
+        settings['white_luma_threshold'],
+        settings['white_chroma_spread'],
+    )
+    pixmap_rgbs = [hex_to_rgb(k) for k in pixmap_keys]
+    drawing_filtered = []
+    draw_link_tol_sq = (max(1, tolerance) * 2) ** 2
+    for key in drawing_keys:
+        dr, dg, db = hex_to_rgb(key)
+        if is_background_like_color(
+            dr, dg, db,
+            settings['white_threshold'],
+            settings['white_luma_threshold'],
+            settings['white_chroma_spread'],
+        ):
+            continue
+        if not pixmap_rgbs:
+            drawing_filtered.append(key)
+            continue
+        if any(rgb_dist_sq(dr, dg, db, pr, pg, pb) <= draw_link_tol_sq for pr, pg, pb in pixmap_rgbs):
+            drawing_filtered.append(key)
+
+    all_keys = list(pixmap_keys) + [k for k in drawing_filtered if k not in pixmap_keys]
     color_groups = merge_color_keys(all_keys, tolerance)
 
     manifest = {
         'schema': 'phase1.zone_by_color.v3',
         'render_mode': 'pixel_mask',
         'color_assignment': 'stroke_or_fill_plus_pixmap',
+        'color_preset': settings['preset'],
         'generated_at_utc': datetime.datetime.utcnow().isoformat() + 'Z',
         'source_pdf': pdf_path,
         'page': page_num,
@@ -328,6 +469,12 @@ def main():
         'rotation_degrees': rotation,
         'dpi': dpi,
         'tolerance_rgb': tolerance,
+        'min_color_pixels': settings['min_color_pixels'],
+        'min_color_coverage': settings['min_color_coverage'],
+        'min_json_entities': settings['min_json_entities'],
+        'white_threshold': settings['white_threshold'],
+        'white_luma_threshold': settings['white_luma_threshold'],
+        'white_chroma_spread': settings['white_chroma_spread'],
         'zone_full_render': 'zone_full_render.png',
         'colors': [],
     }
@@ -338,19 +485,47 @@ def main():
         hex_key = group['rep']
         members = group['members']
         tr, tg, tb = hex_to_rgb(hex_key)
+        if is_background_like_color(
+            tr, tg, tb,
+            settings['white_threshold'],
+            settings['white_luma_threshold'],
+            settings['white_chroma_spread'],
+        ):
+            continue
         color_dir = os.path.join(out_dir, hex_key)
         os.makedirs(color_dir, exist_ok=True)
         png_path = os.path.join(color_dir, 'page.png')
-        save_color_mask_png(zone_pix, (tr, tg, tb), tolerance, png_path)
+        matched_pixels = save_color_mask_png(zone_pix, (tr, tg, tb), tolerance, png_path)
+        coverage = matched_pixels / float(max(1, zone_pix.width * zone_pix.height))
         json_count = filter_json_entities_by_color(
             region_geom, hex_key, members, tolerance, color_dir)
+        keep_due_pixels = matched_pixels >= settings['min_color_pixels']
+        keep_due_coverage = coverage >= settings['min_color_coverage']
+        keep_due_entities = json_count >= settings['min_json_entities']
+        if not (keep_due_pixels or keep_due_coverage or keep_due_entities):
+            shutil.rmtree(color_dir, ignore_errors=True)
+            continue
+        score = compute_color_priority_score(coverage, json_count)
         manifest['colors'].append({
             'hex': '#' + hex_key,
             'member_keys': ['#' + m for m in members],
             'json_entities': json_count,
+            'matched_pixels': matched_pixels,
+            'coverage_ratio': round(coverage, 6),
+            'score': score,
             'png': os.path.join(hex_key, 'page.png').replace('\\', '/'),
             'method': 'pixel_mask',
         })
+
+    manifest['colors'].sort(
+        key=lambda c: (
+            float(c.get('score', 0.0)),
+            float(c.get('coverage_ratio', 0.0)),
+            int(c.get('json_entities', 0)),
+            int(c.get('matched_pixels', 0)),
+        ),
+        reverse=True,
+    )
 
     manifest_path = os.path.join(out_dir, 'by_color_manifest.json')
     with open(manifest_path, 'w', encoding='utf-8') as f:

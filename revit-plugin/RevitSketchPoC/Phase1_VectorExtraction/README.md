@@ -41,6 +41,9 @@ Após **Gerar Fase 1**, o ecrã mostra **contagens** (linhas, polilinhas, retân
 5. **Exportar por cor** (editor de zonas) — por zona seleccionada ou todas:
    - **Render fiel** da zona (`get_pixmap` clip, DPI 300) + **máscara por pixel** (tolerância RGB ~32)
    - Inclui texto, imagens, hachuras e traços finos que o replay vectorial não captava
+   - Presets de ruído: **conservador**, **balanceado** (default) e **agressivo**
+   - Filtro de relevância por cor: mantém a camada se tiver cobertura mínima **ou** número mínimo de entidades JSON (evita perder linhas finas úteis)
+   - Manifesto por zona ordenado por prioridade (`score`), com métricas `matched_pixels` e `coverage_ratio`
    - Saída: `regions/{id}/by_color/zone_full_render.png`, `by_color/{RRGGBB}/page.png`, JSON filtrado, `by_color_manifest.json` (`schema`: `phase1.zone_by_color.v3`, `render_mode`: `pixel_mask`)
 
 ## Exportar

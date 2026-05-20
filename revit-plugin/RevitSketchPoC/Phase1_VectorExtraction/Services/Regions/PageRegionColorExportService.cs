@@ -12,6 +12,21 @@ using System.Linq;
 
 namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
 {
+    public sealed class PageRegionColorExportOptions
+    {
+        public string Preset { get; set; } = "balanced";
+        public int PreviewDpi { get; set; } = 300;
+        public int ColorTolerance { get; set; } = 32;
+        public int MinColorPixels { get; set; } = 64;
+        public double MinColorCoverage { get; set; } = 0.00035;
+        public int MinJsonEntities { get; set; } = 1;
+        public int WhiteThreshold { get; set; } = 248;
+        public int WhiteLumaThreshold { get; set; } = 242;
+        public int WhiteChromaSpread { get; set; } = 18;
+
+        public static PageRegionColorExportOptions CreateDefault() => new PageRegionColorExportOptions();
+    }
+
     public sealed class PageRegionColorExportResult
     {
         public string RegionId { get; set; } = string.Empty;
@@ -23,14 +38,12 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
     public static class PageRegionColorExportService
     {
         private const int TimeoutMs = 10 * 60 * 1000;
-        private const int DefaultDpi = 300;
-        private const int DefaultColorTolerance = 32;
 
         public static IReadOnlyList<PageRegionColorExportResult> ExportAllRegions(
             string outputRoot,
-            int previewDpi = DefaultDpi,
-            int colorTolerance = DefaultColorTolerance)
+            PageRegionColorExportOptions? options = null)
         {
+            options ??= PageRegionColorExportOptions.CreateDefault();
             var regionsPath = Path.Combine(outputRoot, Phase1ArtifactLayout.PageRegionsFileName);
             if (!File.Exists(regionsPath))
             {
@@ -60,7 +73,8 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
                     continue;
                 }
 
-                results.Add(ExportRegion(outputRoot, id, bbox, previewDpi, colorTolerance));
+                var regionId = id;
+                results.Add(ExportRegion(outputRoot, regionId, bbox, options));
             }
 
             return results;
@@ -70,9 +84,9 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
             string outputRoot,
             string regionId,
             double[] bboxPt,
-            int previewDpi = DefaultDpi,
-            int colorTolerance = DefaultColorTolerance)
+            PageRegionColorExportOptions? options = null)
         {
+            options ??= PageRegionColorExportOptions.CreateDefault();
             if (bboxPt == null || bboxPt.Length < 4)
             {
                 throw new ArgumentException("bbox_pt inválido.");
@@ -104,8 +118,15 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
                 dims.RotationDegrees.ToString(inv) + " " +
                 dims.WidthPt.ToString(inv) + " " +
                 dims.HeightPt.ToString(inv) + " " +
-                previewDpi.ToString(inv) + " " +
-                colorTolerance.ToString(inv);
+                options.PreviewDpi.ToString(inv) + " " +
+                options.ColorTolerance.ToString(inv) + " " +
+                options.Preset + " " +
+                options.MinColorPixels.ToString(inv) + " " +
+                options.MinColorCoverage.ToString(inv) + " " +
+                options.MinJsonEntities.ToString(inv) + " " +
+                options.WhiteThreshold.ToString(inv) + " " +
+                options.WhiteLumaThreshold.ToString(inv) + " " +
+                options.WhiteChromaSpread.ToString(inv);
 
             PythonProcessRunner.RunReturningStdout(args, TimeoutMs, "Falha na exportação por cor (PyMuPDF).");
 
@@ -121,7 +142,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
                         var hex = c["hex"]?.ToString()?.TrimStart('#');
                         if (!string.IsNullOrWhiteSpace(hex))
                         {
-                            colorKeys.Add(hex);
+                            colorKeys.Add(hex!);
                         }
                     }
                 }
@@ -145,7 +166,7 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Services.Regions
                 var pdf = raw["source_pdf"]?.ToString();
                 if (!string.IsNullOrWhiteSpace(pdf) && File.Exists(pdf))
                 {
-                    return pdf;
+                    return pdf!;
                 }
             }
 

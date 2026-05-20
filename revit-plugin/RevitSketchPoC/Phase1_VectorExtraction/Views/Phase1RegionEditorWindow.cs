@@ -35,6 +35,11 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         private readonly TextBlock _hintText;
         private readonly TextBlock _statusText;
         private readonly TextBox _summaryBox;
+        private readonly ComboBox _colorPresetCombo;
+        private readonly TextBox _colorToleranceBox;
+        private readonly TextBox _minPixelsBox;
+        private readonly TextBox _minCoverageBox;
+        private readonly TextBox _minJsonEntitiesBox;
         private readonly Grid _surface;
         private readonly Image _image;
         private readonly Canvas _overlay;
@@ -138,6 +143,25 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             side.Children.Add(MakeButton("Preset: 2 colunas (≈65% / 35%)", (_, _) => OnPresetTwoColumns()));
             side.Children.Add(MakeButton("Remover zona seleccionada", (_, _) => OnRemoveSelected()));
             side.Children.Add(MakeButton("Limpar todas", (_, _) => OnClearAll()));
+            side.Children.Add(new TextBlock
+            {
+                Text = "Parâmetros exportação por cor",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 10, 0, 6),
+                FontSize = 12
+            });
+            _colorPresetCombo = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 6),
+                Height = 28,
+                ItemsSource = new[] { "balanceado", "conservador", "agressivo" },
+                SelectedIndex = 0
+            };
+            side.Children.Add(_colorPresetCombo);
+            _colorToleranceBox = MakeInlineSettingBox("Tolerância RGB", "32", side);
+            _minPixelsBox = MakeInlineSettingBox("Mín. pixels", "64", side);
+            _minCoverageBox = MakeInlineSettingBox("Mín. cobertura (0-1)", "0.00035", side);
+            _minJsonEntitiesBox = MakeInlineSettingBox("Mín. entidades JSON", "1", side);
             side.Children.Add(MakeButton("Exportar por cor (zona seleccionada)", (_, _) => OnExportSelectedByColor()));
             side.Children.Add(MakeButton("Exportar por cor (todas as zonas)", (_, _) => OnExportAllByColor()));
             side.Children.Add(new TextBlock
@@ -472,11 +496,13 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             {
                 SetStatus("A exportar PNG por cor (PyMuPDF) para «" + row.Label + "»…");
                 var bboxPt = BboxNormToPt(row.BboxNorm);
-                var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt);
+                var options = BuildColorExportOptions();
+                var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt, options);
                 ColorLayersWereExported = true;
                 RegionsWereExported = true;
                 SetStatus(
-                    "Por cor: " + result.ColorHexKeys.Count + " cores em " + result.ByColorRoot);
+                    "Por cor: " + result.ColorHexKeys.Count + " cores em " + result.ByColorRoot +
+                    " (preset=" + options.Preset + ")");
                 TryShowFullPageSummary();
                 MessageBox.Show(
                     "Exportadas " + result.ColorHexKeys.Count + " cores.\n" + result.ByColorRoot,
@@ -501,11 +527,12 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
             try
             {
                 var totalColors = 0;
+                var options = BuildColorExportOptions();
                 foreach (var row in _regions.ToList())
                 {
                     SetStatus("Por cor: «" + row.Label + "»…");
                     var bboxPt = BboxNormToPt(row.BboxNorm);
-                    var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt);
+                    var result = PageRegionColorExportService.ExportRegion(_outputRoot, row.Id, bboxPt, options);
                     totalColors += result.ColorHexKeys.Count;
                 }
 
@@ -588,6 +615,79 @@ namespace RevitSketchPoC.Phase1_VectorExtraction.Views
         }
 
         private void SetStatus(string text) => _statusText.Text = text;
+
+        private PageRegionColorExportOptions BuildColorExportOptions()
+        {
+            var preset = (_colorPresetCombo.SelectedItem?.ToString() ?? "balanceado").Trim().ToLowerInvariant();
+            var options = PageRegionColorExportOptions.CreateDefault();
+            options.Preset = preset;
+            options.ColorTolerance = ParseInt(_colorToleranceBox.Text, 32, 1, 255);
+            options.MinColorPixels = ParseInt(_minPixelsBox.Text, 64, 1, 50000000);
+            options.MinColorCoverage = ParseDouble(_minCoverageBox.Text, 0.00035, 0.0, 1.0);
+            options.MinJsonEntities = ParseInt(_minJsonEntitiesBox.Text, 1, 0, 1000000);
+            return options;
+        }
+
+        private static int ParseInt(string? raw, int fallback, int min, int max)
+        {
+            if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                return fallback;
+            }
+
+            if (value < min)
+            {
+                return min;
+            }
+
+            if (value > max)
+            {
+                return max;
+            }
+
+            return value;
+        }
+
+        private static double ParseDouble(string? raw, double fallback, double min, double max)
+        {
+            var text = (raw ?? string.Empty).Trim().Replace(',', '.');
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            {
+                return fallback;
+            }
+
+            if (value < min)
+            {
+                return min;
+            }
+
+            if (value > max)
+            {
+                return max;
+            }
+
+            return value;
+        }
+
+        private static TextBox MakeInlineSettingBox(string label, string defaultValue, Panel container)
+        {
+            container.Children.Add(new TextBlock
+            {
+                Text = label,
+                Margin = new Thickness(0, 2, 0, 2),
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139))
+            });
+
+            var box = new TextBox
+            {
+                Margin = new Thickness(0, 0, 0, 6),
+                Height = 26,
+                Text = defaultValue
+            };
+            container.Children.Add(box);
+            return box;
+        }
 
         private static Button MakeButton(string text, RoutedEventHandler click)
         {
